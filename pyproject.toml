@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "titletrace"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.4,<0.6",
+    "langsmith>=0.2",
+    "anthropic>=0.90",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "httpx>=0.28",
+    "rolling-cost-cap>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "responses>=0.25", "pytest-asyncio>=0.24", "httpx", "respx"]
+eval = ["openai>=1.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/titletrace"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: requires live API keys (skipped in CI unless INTEGRATION=true)"]
