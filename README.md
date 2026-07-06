@@ -1,18 +1,16 @@
 # TitleTrace
 
+[![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
+![29 tests](https://img.shields.io/badge/tests-29-brightgreen)
+
 Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 6 parallel data lookups, conditionally drills into liens and tax delinquency, then synthesizes a structured title report via Claude.
 
-```
+```bash
 docker compose up --build
 curl -X POST localhost:8000/api/trace \
   -H 'Content-Type: application/json' \
   -d '{"address": "1234 Market St, Philadelphia, PA 19107"}'
 ```
-
-[![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![29 tests](https://img.shields.io/badge/tests-29-brightgreen)
-
----
 
 ## Problem
 
