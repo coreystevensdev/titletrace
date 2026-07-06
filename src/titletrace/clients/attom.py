@@ -179,12 +179,9 @@ async def fetch_lienholder_details_attom(
     apn: str,
     state: str,
 ) -> list[LienholderDetail]:
-    """Fetch lienholder name, address, and UCC filing numbers from ATTOM.
-
-    Calls the same /alllien/detail endpoint used by search_liens_attom but
-    maps the richer per-lienholder fields (address, UCC filing number) that
-    the initial lien pass skips in favor of the lighter LienResult model.
-    """
+    """Fetch lienholder name, address, and UCC filing numbers from ATTOM."""
+    # Same /alllien/detail endpoint as search_liens_attom; maps the richer
+    # per-lienholder fields (address, UCC filing number) skipped in the initial pass.
     data = await get_json(
         client,
         f"{_ATTOM_BASE}/alllien/detail",
@@ -211,12 +208,9 @@ async def fetch_tax_claim_detail_attom(
     apn: str,
     state: str,
 ) -> TaxClaimDetail | None:
-    """Fetch tax lien claim detail from ATTOM.
-
-    Filters /alllien/detail to tax liens only, returns the first match.
-    Called only when check_tax already established delinquency, so an
-    empty response means the lien is not yet recorded in ATTOM (county lag).
-    """
+    """Fetch tax lien claim detail from ATTOM; filters to taxlien type, returns first match."""
+    # Called only after check_tax confirmed delinquency. An empty response means
+    # the lien is not yet recorded in ATTOM due to county recording lag.
     data = await get_json(
         client,
         f"{_ATTOM_BASE}/alllien/detail",

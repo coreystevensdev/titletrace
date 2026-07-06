@@ -17,10 +17,10 @@ from titletrace.state import TraceReport, TraceState
 _CLIENT = None
 
 
-def _get_client() -> anthropic.Anthropic:
+def _get_client() -> anthropic.AsyncAnthropic:
     global _CLIENT
     if _CLIENT is None:
-        _CLIENT = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        _CLIENT = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     return _CLIENT
 
 
@@ -117,7 +117,7 @@ async def synthesize_report(state: TraceState) -> dict:
     client = _get_client()
     parcel = state.get("parcel")
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         max_tokens=1024,
         tools=[_REPORT_TOOL],

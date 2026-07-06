@@ -14,11 +14,6 @@ from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 
 
-# ---------------------------------------------------------------------------
-# Pydantic models -- API response shapes
-# ---------------------------------------------------------------------------
-
-
 class ParcelResult(BaseModel):
     parcel_id: str
     address: str
@@ -120,21 +115,11 @@ class TraceReport(BaseModel):
     confidence: str = "partial"
 
 
-# ---------------------------------------------------------------------------
-# LangGraph state
-# ---------------------------------------------------------------------------
-
-
 class TraceState(TypedDict):
-    # Input
     raw_address: str
-
-    # Parsed
     parcel_id: str | None
     state: str | None
     city: str | None
-
-    # Lookup results -- populated by parallel fan-out nodes
     parcel: ParcelResult | None
     ownership_history: list[OwnerRecord]
     liens: list[LienResult]
@@ -142,13 +127,7 @@ class TraceState(TypedDict):
     zoning: ZoningResult | None
     tax_status: TaxStatus | None
     flood_zone: FloodZoneResult | None
-
-    # Conditional drill-down results
     lienholder_details: list[LienholderDetail]
     tax_claim_detail: TaxClaimDetail | None
-
-    # Final output
     report: TraceReport | None
-
-    # Error state -- address not found or unrecoverable API failure
     error: str | None

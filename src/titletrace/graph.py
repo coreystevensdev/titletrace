@@ -51,12 +51,6 @@ from titletrace.nodes.parse_address import parse_address
 from titletrace.nodes.synthesize_report import synthesize_report
 from titletrace.state import TraceState
 
-# ---------------------------------------------------------------------------
-# Parallel fan-out node wrappers
-# Each returns a partial TraceState dict; LangGraph merges them at the fan-in.
-# ---------------------------------------------------------------------------
-
-
 async def _fetch_ownership(state: TraceState, client: httpx.AsyncClient) -> dict:
     parcel = state.get("parcel")
     if not parcel:
@@ -115,13 +109,7 @@ async def _fetch_flood_zone(state: TraceState, client: httpx.AsyncClient) -> dic
     return {"flood_zone": None}
 
 
-# ---------------------------------------------------------------------------
-# Conditional edges
-# ---------------------------------------------------------------------------
-
-
 def _route_after_parcel(state: TraceState):
-    """If parcel lookup failed, end immediately. Otherwise fan out all 6 lookups."""
     if state.get("error"):
         return END
     return [
@@ -135,7 +123,6 @@ def _route_after_parcel(state: TraceState):
 
 
 def _route_after_fanin(state: TraceState):
-    """After fan-in, drill down if liens or tax delinquency found."""
     next_nodes = []
     if state.get("liens"):
         next_nodes.append("fetch_lienholder_detail")
@@ -164,11 +151,6 @@ async def _fetch_tax_claim_detail(state: TraceState, client: httpx.AsyncClient) 
         client, parcel.parcel_id, state.get("state") or "PA"
     )
     return {"tax_claim_detail": detail}
-
-
-# ---------------------------------------------------------------------------
-# Graph assembly
-# ---------------------------------------------------------------------------
 
 
 def build_graph(client: httpx.AsyncClient) -> StateGraph:
