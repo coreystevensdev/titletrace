@@ -4,8 +4,10 @@ import respx
 import httpx
 
 from titletrace.clients.attom import (
+    fetch_lienholder_details_attom,
     fetch_parcel_attom,
     fetch_ownership_attom,
+    fetch_tax_claim_detail_attom,
     search_liens_attom,
     fetch_zoning_attom,
     _ATTOM_BASE,
@@ -142,3 +144,78 @@ async def test_fetch_zoning_attom(client):
     assert result.zoning_code == "R1"
     assert result.zoning_description == "Residential Single Family"
     assert result.source == "ATTOM"
+
+
+@pytest.mark.asyncio
+async def test_fetch_lienholder_details_attom_with_data(client):
+    payload = {
+        "property": [
+            {
+                "liens": [
+                    {
+                        "lienType": "mortgage",
+                        "lienHolderName": "First Federal Bank",
+                        "lienHolderAddr": "100 Finance Ave, Newark, NJ 07102",
+                        "uccFileNum": "UCC-2021-00123",
+                    }
+                ]
+            }
+        ]
+    }
+    with respx.mock:
+        respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json=payload))
+        details = await fetch_lienholder_details_attom(client, "NJ-001-ABC", "NJ")
+
+    assert len(details) == 1
+    assert details[0].lien_type == "mortgage"
+    assert details[0].lienholder_name == "First Federal Bank"
+    assert details[0].lienholder_address == "100 Finance Ave, Newark, NJ 07102"
+    assert details[0].ucc_filing_number == "UCC-2021-00123"
+    assert details[0].source == "ATTOM"
+
+
+@pytest.mark.asyncio
+async def test_fetch_lienholder_details_attom_empty(client):
+    with respx.mock:
+        respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json={"property": []}))
+        details = await fetch_lienholder_details_attom(client, "NJ-001-ABC", "NJ")
+
+    assert details == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_tax_claim_detail_attom_with_data(client):
+    payload = {
+        "property": [
+            {
+                "liens": [
+                    {
+                        "lienType": "taxlien",
+                        "taxYear": "2023",
+                        "lienAmt": "4800.50",
+                        "lienHolderName": "Camden County Tax Collector",
+                        "lienStatus": "open",
+                    }
+                ]
+            }
+        ]
+    }
+    with respx.mock:
+        respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json=payload))
+        detail = await fetch_tax_claim_detail_attom(client, "NJ-001-ABC", "NJ")
+
+    assert detail is not None
+    assert detail.claim_year == 2023
+    assert detail.amount == 4800.50
+    assert detail.lienholder == "Camden County Tax Collector"
+    assert detail.status == "open"
+    assert detail.source == "ATTOM"
+
+
+@pytest.mark.asyncio
+async def test_fetch_tax_claim_detail_attom_not_found(client):
+    with respx.mock:
+        respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json={"property": []}))
+        detail = await fetch_tax_claim_detail_attom(client, "NJ-001-ABC", "NJ")
+
+    assert detail is None

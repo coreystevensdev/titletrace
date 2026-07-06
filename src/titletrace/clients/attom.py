@@ -18,8 +18,10 @@ from titletrace.clients._base import get_json
 from titletrace.state import (
     EncumbranceResult,
     LienResult,
+    LienholderDetail,
     OwnerRecord,
     ParcelResult,
+    TaxClaimDetail,
     ZoningResult,
 )
 
@@ -170,3 +172,71 @@ async def fetch_zoning_attom(
         permit_count=None,
         source="ATTOM",
     )
+
+
+async def fetch_lienholder_details_attom(
+    client: httpx.AsyncClient,
+    apn: str,
+    state: str,
+) -> list[LienholderDetail]:
+    """Fetch lienholder name, address, and UCC filing numbers from ATTOM.
+
+    Calls the same /alllien/detail endpoint used by search_liens_attom but
+    maps the richer per-lienholder fields (address, UCC filing number) that
+    the initial lien pass skips in favor of the lighter LienResult model.
+    """
+    data = await get_json(
+        client,
+        f"{_ATTOM_BASE}/alllien/detail",
+        params={"apn": apn, "state": state},
+        headers=_headers(),
+    )
+    details: list[LienholderDetail] = []
+    for item in data.get("property", []):
+        for lien in item.get("liens", []):
+            details.append(
+                LienholderDetail(
+                    lien_type=lien.get("lienType", "unknown"),
+                    lienholder_name=lien.get("lienHolderName"),
+                    lienholder_address=lien.get("lienHolderAddr"),
+                    ucc_filing_number=lien.get("uccFileNum"),
+                    source="ATTOM",
+                )
+            )
+    return details
+
+
+async def fetch_tax_claim_detail_attom(
+    client: httpx.AsyncClient,
+    apn: str,
+    state: str,
+) -> TaxClaimDetail | None:
+    """Fetch tax lien claim detail from ATTOM.
+
+    Filters /alllien/detail to tax liens only, returns the first match.
+    Called only when check_tax already established delinquency, so an
+    empty response means the lien is not yet recorded in ATTOM (county lag).
+    """
+    data = await get_json(
+        client,
+        f"{_ATTOM_BASE}/alllien/detail",
+        params={"apn": apn, "state": state, "lienType": "taxlien"},
+        headers=_headers(),
+    )
+    for item in data.get("property", []):
+        for lien in item.get("liens", []):
+            claim_year: int | None = None
+            raw_year = lien.get("taxYear") or lien.get("recordingDate", "")
+            if raw_year:
+                try:
+                    claim_year = int(str(raw_year)[:4])
+                except (ValueError, TypeError):
+                    pass
+            return TaxClaimDetail(
+                claim_year=claim_year,
+                amount=float(lien["lienAmt"]) if lien.get("lienAmt") else None,
+                lienholder=lien.get("lienHolderName"),
+                status=lien.get("lienStatus"),
+                source="ATTOM",
+            )
+    return None

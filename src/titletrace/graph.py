@@ -34,7 +34,9 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
 from titletrace.clients.attom import (
+    fetch_lienholder_details_attom,
     fetch_ownership_attom,
+    fetch_tax_claim_detail_attom,
     fetch_zoning_attom,
     search_encumbrances_attom,
     search_liens_attom,
@@ -85,9 +87,8 @@ async def _search_encumbrances(state: TraceState, client: httpx.AsyncClient) -> 
 
 
 async def _fetch_zoning(state: TraceState, client: httpx.AsyncClient) -> dict:
-    if _is_philadelphia(state):
-        # Philadelphia zoning served via OpenDataPhilly -- ATTOM fallback for now
-        pass
+    # ATTOM is the zoning source for both Philadelphia and non-Philadelphia properties.
+    # OPA does not expose a zoning classification endpoint.
     street = state["raw_address"].split(",", 1)[0].strip()
     rest = state["raw_address"].split(",", 1)[1].strip() if "," in state["raw_address"] else ""
     result = await fetch_zoning_attom(client, street, rest)
@@ -146,12 +147,23 @@ def _route_after_fanin(state: TraceState):
 
 
 async def _fetch_lienholder_detail(state: TraceState, client: httpx.AsyncClient) -> dict:
-    # ATTOM lienholder detail -- returns lien holder names and UCC filing numbers
-    return {"lienholder_details": []}
+    parcel = state.get("parcel")
+    if not parcel:
+        return {"lienholder_details": []}
+    details = await fetch_lienholder_details_attom(
+        client, parcel.parcel_id, state.get("state") or "PA"
+    )
+    return {"lienholder_details": details}
 
 
 async def _fetch_tax_claim_detail(state: TraceState, client: httpx.AsyncClient) -> dict:
-    return {"tax_claim_detail": None}
+    parcel = state.get("parcel")
+    if not parcel:
+        return {"tax_claim_detail": None}
+    detail = await fetch_tax_claim_detail_attom(
+        client, parcel.parcel_id, state.get("state") or "PA"
+    )
+    return {"tax_claim_detail": detail}
 
 
 # ---------------------------------------------------------------------------
