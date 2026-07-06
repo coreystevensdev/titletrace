@@ -10,6 +10,7 @@ curl -X POST localhost:8000/api/trace \
 ```
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
+![29 tests](https://img.shields.io/badge/tests-29-brightgreen)
 
 ---
 
