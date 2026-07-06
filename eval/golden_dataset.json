@@ -1,0 +1,50 @@
+[
+  {
+    "id": "philly-1",
+    "address": "1234 Market St, Philadelphia, PA 19107",
+    "description": "Philadelphia commercial corridor, no known liens",
+    "expected_state": "PA",
+    "expected_city": "Philadelphia",
+    "data_source": "Philadelphia OPA",
+    "expected_findings_contain": [],
+    "expected_confidence_min": "partial"
+  },
+  {
+    "id": "philly-2",
+    "address": "1500 Chestnut St, Philadelphia, PA 19102",
+    "description": "Philadelphia property with tax delinquency in test fixture",
+    "expected_state": "PA",
+    "expected_city": "Philadelphia",
+    "data_source": "Philadelphia OPA",
+    "expected_findings_contain": [],
+    "expected_confidence_min": "partial"
+  },
+  {
+    "id": "nj-1",
+    "address": "100 Broad St, Trenton, NJ 08608",
+    "description": "New Jersey property via ATTOM",
+    "expected_state": "NJ",
+    "expected_city": "Trenton",
+    "data_source": "ATTOM",
+    "expected_findings_contain": [],
+    "expected_confidence_min": "partial"
+  },
+  {
+    "id": "bad-address-1",
+    "address": "123 Nowhere Lane",
+    "description": "Malformed address with no state",
+    "expected_state": null,
+    "expected_city": null,
+    "data_source": null,
+    "expected_error_contains": "PA or NJ"
+  },
+  {
+    "id": "bad-address-2",
+    "address": "500 Fifth Ave, New York, NY 10110",
+    "description": "Out-of-coverage state",
+    "expected_state": null,
+    "expected_city": null,
+    "data_source": null,
+    "expected_error_contains": "not supported"
+  }
+]

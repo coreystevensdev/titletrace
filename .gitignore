@@ -6,8 +6,7 @@ __pycache__/
 dist/
 *.egg-info/
 .venv/
-eval/report.json
-eval/golden_dataset.json
+eval/results.json
 _bmad-output/
 _bmad/
 *_explained.md
