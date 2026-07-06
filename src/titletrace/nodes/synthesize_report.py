@@ -125,7 +125,10 @@ async def synthesize_report(state: TraceState) -> dict:
         messages=[{"role": "user", "content": _build_prompt(state)}],
     )
 
-    tool_use = next(b for b in response.content if b.type == "tool_use")
+    tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+    if not tool_use_blocks:
+        return {"error": "Model did not return a structured report. Retry the request."}
+    tool_use = tool_use_blocks[0]
     args = tool_use.input
 
     report = TraceReport(

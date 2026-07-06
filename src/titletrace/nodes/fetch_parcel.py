@@ -7,7 +7,11 @@ source, the node sets an error and the graph terminates without synthesizing.
 
 from __future__ import annotations
 
+import logging
+
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from titletrace.clients.attom import fetch_parcel_attom
 from titletrace.clients.opa import fetch_parcel_opa
@@ -43,7 +47,8 @@ async def fetch_parcel(state: TraceState, client: httpx.AsyncClient) -> dict:
         street, citystate = _street_and_citystate(raw)
         try:
             parcel = await fetch_parcel_attom(client, street, citystate)
-        except Exception:
+        except Exception as exc:
+            logger.warning("ATTOM parcel fetch failed for %r: %s", citystate, exc)
             parcel = None
 
     if parcel is None:
