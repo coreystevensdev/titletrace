@@ -47,9 +47,37 @@ async def fetch_parcel(state: TraceState, client: httpx.AsyncClient) -> dict:
         street, citystate = _street_and_citystate(raw)
         try:
             parcel = await fetch_parcel_attom(client, street, citystate)
-        except Exception as exc:
-            logger.warning("ATTOM parcel fetch failed for %r: %s", citystate, exc)
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status in (401, 403):
+                logger.error("ATTOM auth failure status=%d for %r", status, citystate)
+                return {
+                    "error": (
+                        "Property data lookup is misconfigured (ATTOM authentication "
+                        f"failed with HTTP {status}). This is a service configuration "
+                        "problem, not a bad address. Check the ATTOM_API_KEY."
+                    )
+                }
+            if status >= 500:
+                logger.error("ATTOM upstream failure status=%d for %r", status, citystate)
+                return {
+                    "error": (
+                        f"Property data provider (ATTOM) returned HTTP {status}. "
+                        "This is an upstream outage, not a bad address. "
+                        "Try again later."
+                    )
+                }
+            logger.warning("ATTOM parcel fetch failed status=%d for %r", status, citystate)
             parcel = None
+        except httpx.RequestError as exc:
+            logger.error("ATTOM request error for %r: %s", citystate, exc)
+            return {
+                "error": (
+                    "Could not reach the property data provider (ATTOM). "
+                    "This is a network or upstream problem, not a bad address. "
+                    "Try again later."
+                )
+            }
 
     if parcel is None:
         return {
