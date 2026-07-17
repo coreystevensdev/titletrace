@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![33 tests](https://img.shields.io/badge/tests-33-brightgreen)
+![40 tests](https://img.shields.io/badge/tests-40-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 6 parallel data lookups, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 33 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 6 parallel data lookups, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 40 tests (pytest + respx).
 
 ```bash
 docker compose up --build
@@ -18,7 +18,7 @@ Title searches in PA and NJ require pulling data from four to six separate sourc
 
 ## Solution
 
-A LangGraph state machine runs the lookups concurrently. Philadelphia properties route through the free OPA (Office of Property Assessment) and OpenDataPhilly APIs; all other PA and NJ properties use ATTOM Data. Flood zones come from FEMA NFHL's public ArcGIS REST endpoint (no key required). After the parallel fan-out completes, Claude synthesizes a structured `TraceReport` via forced tool call, surfacing data gaps explicitly rather than hallucinating over missing fields.
+A LangGraph state machine runs the lookups concurrently. Philadelphia properties route through the free OPA (Office of Property Assessment) and OpenDataPhilly APIs; all other PA and NJ properties use ATTOM Data. A FEMA NFHL client exists and is fully implemented, but the flood-zone node doesn't call it yet: it needs a lat/lon the pipeline doesn't currently geocode, so it returns `None` on every trace (see Known Limitations). After the parallel fan-out completes, Claude synthesizes a structured `TraceReport` via forced tool call, surfacing data gaps explicitly rather than hallucinating over missing fields.
 
 ## Architecture
 
@@ -45,9 +45,9 @@ Claude is called only once, in `synthesize_report`, with a forced `submit_report
 
 | Coverage | Parcel + Owner | Tax | Liens | Zoning | Flood Zone |
 |---|---|---|---|---|---|
-| Philadelphia | OPA (free) | OPA (free) | ATTOM | ATTOM | FEMA NFHL (free) |
-| PA (non-Philly) | ATTOM | not implemented in v1 | ATTOM | ATTOM | FEMA NFHL (free) |
-| NJ | ATTOM | not implemented in v1 | ATTOM | ATTOM | FEMA NFHL (free) |
+| Philadelphia | OPA (free) | OPA (free) | ATTOM | ATTOM | not wired (always null) |
+| PA (non-Philly) | ATTOM | not implemented in v1 | ATTOM | ATTOM | not wired (always null) |
+| NJ | ATTOM | not implemented in v1 | ATTOM | ATTOM | not wired (always null) |
 
 ## Tech Stack
 
@@ -59,7 +59,7 @@ Claude is called only once, in `synthesize_report`, with a forced `submit_report
 | HTTP | httpx.AsyncClient | Single shared connection pool across all 6 concurrent API calls; 30s timeout + exponential backoff on 429/503 |
 | Data (Philadelphia) | OPA + OpenDataPhilly | Free Socrata endpoints, no key required; best parcel coverage for Philadelphia |
 | Data (PA/NJ) | ATTOM Data API | Single vendor covering parcel, ownership, liens, encumbrances, and zoning across PA and NJ |
-| Flood zone | FEMA NFHL ArcGIS REST | Public endpoint, no key, authoritative FIRM panel designation |
+| Flood zone | FEMA NFHL ArcGIS REST | Public endpoint, no key, authoritative FIRM panel designation. Client is implemented but not yet called from the graph -- see Known Limitations |
 | Tests | pytest + respx | respx intercepts httpx at the client level so all API calls are mocked without touching the network |
 | Packaging | hatchling | PEP 517 build, `pip install -e .` for local dev |
 
@@ -91,7 +91,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-Tests run without any API keys. Integration tests (requires live ATTOM key) are marked and skipped in CI:
+All 40 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
