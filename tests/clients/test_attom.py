@@ -1,3 +1,4 @@
+import asyncio
 import os
 import pytest
 import respx
@@ -8,6 +9,7 @@ from titletrace.clients.attom import (
     fetch_parcel_attom,
     fetch_ownership_attom,
     fetch_tax_claim_detail_attom,
+    search_encumbrances_attom,
     search_liens_attom,
     fetch_zoning_attom,
     _ATTOM_BASE,
@@ -241,3 +243,67 @@ async def test_fetch_tax_claim_detail_attom_not_found(client):
         detail = await fetch_tax_claim_detail_attom(client, "NJ-001-ABC", "NJ")
 
     assert detail is None
+
+
+@pytest.mark.asyncio
+async def test_search_liens_and_encumbrances_split_one_response(client):
+    payload = {
+        "property": [
+            {
+                "liens": [
+                    {
+                        "lienType": "mortgage",
+                        "lienAmt": "250000",
+                        "recordingDate": "2021-06-10",
+                        "lienHolderName": "First Federal Bank",
+                        "lienStatus": "open",
+                    },
+                    {
+                        "lienType": "encumbrance",
+                        "lienComment": "Utility easement",
+                        "recordingDate": "2019-03-01",
+                    },
+                ]
+            }
+        ]
+    }
+    with respx.mock:
+        route = respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json=payload))
+        liens, encumbrances = await asyncio.gather(
+            search_liens_attom(client, "NJ-001-ABC", "NJ"),
+            search_encumbrances_attom(client, "NJ-001-ABC", "NJ"),
+        )
+
+    assert route.call_count == 1
+    assert len(liens) == 1
+    assert liens[0].lien_type == "mortgage"
+    assert len(encumbrances) == 1
+    assert encumbrances[0].encumbrance_type == "encumbrance"
+    assert encumbrances[0].description == "Utility easement"
+
+
+@pytest.mark.asyncio
+async def test_search_encumbrances_attom_empty(client):
+    with respx.mock:
+        respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json={"property": []}))
+        encumbrances = await search_encumbrances_attom(client, "NJ-001-ABC", "NJ")
+
+    assert encumbrances == []
+
+
+@pytest.mark.asyncio
+async def test_search_liens_attom_excludes_encumbrance_type(client):
+    payload = {
+        "property": [
+            {
+                "liens": [
+                    {"lienType": "encumbrance", "lienComment": "Utility easement"},
+                ]
+            }
+        ]
+    }
+    with respx.mock:
+        respx.get(LIEN_URL).mock(return_value=httpx.Response(200, json=payload))
+        liens = await search_liens_attom(client, "NJ-001-ABC", "NJ")
+
+    assert liens == []

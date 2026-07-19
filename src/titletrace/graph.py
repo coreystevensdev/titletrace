@@ -33,6 +33,7 @@ lien/tax-claim conditional routing.
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import partial
 
@@ -58,16 +59,23 @@ from titletrace.nodes.parse_address import parse_address
 from titletrace.nodes.synthesize_report import synthesize_report
 from titletrace.state import TaxStatus, TraceState
 
+logger = logging.getLogger(__name__)
+
+
 async def _fetch_ownership(state: TraceState, client: httpx.AsyncClient) -> dict:
     parcel = state.get("parcel")
     if not parcel:
         return {"ownership_history": []}
-    if _is_philadelphia(state):
-        records = await fetch_ownership_history_opa(client, parcel.parcel_id)
-    else:
-        street = state["raw_address"].split(",", 1)[0].strip()
-        rest = state["raw_address"].split(",", 1)[1].strip() if "," in state["raw_address"] else ""
-        records = await fetch_ownership_attom(client, street, rest)
+    try:
+        if _is_philadelphia(state):
+            records = await fetch_ownership_history_opa(client, parcel.parcel_id)
+        else:
+            street = state["raw_address"].split(",", 1)[0].strip()
+            rest = state["raw_address"].split(",", 1)[1].strip() if "," in state["raw_address"] else ""
+            records = await fetch_ownership_attom(client, street, rest)
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("fetch_ownership failed for parcel %s: %s", parcel.parcel_id, exc)
+        return {"ownership_history": []}
     return {"ownership_history": records}
 
 
@@ -75,7 +83,11 @@ async def _search_liens(state: TraceState, client: httpx.AsyncClient) -> dict:
     parcel = state.get("parcel")
     if not parcel:
         return {"liens": []}
-    liens = await search_liens_attom(client, parcel.parcel_id, state.get("state") or "PA")
+    try:
+        liens = await search_liens_attom(client, parcel.parcel_id, state.get("state") or "PA")
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("search_liens failed for parcel %s: %s", parcel.parcel_id, exc)
+        return {"liens": []}
     return {"liens": liens}
 
 
@@ -83,7 +95,11 @@ async def _search_encumbrances(state: TraceState, client: httpx.AsyncClient) -> 
     parcel = state.get("parcel")
     if not parcel:
         return {"encumbrances": []}
-    enc = await search_encumbrances_attom(client, parcel.parcel_id, state.get("state") or "PA")
+    try:
+        enc = await search_encumbrances_attom(client, parcel.parcel_id, state.get("state") or "PA")
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("search_encumbrances failed for parcel %s: %s", parcel.parcel_id, exc)
+        return {"encumbrances": []}
     return {"encumbrances": enc}
 
 
@@ -92,7 +108,11 @@ async def _fetch_zoning(state: TraceState, client: httpx.AsyncClient) -> dict:
     # OPA does not expose a zoning classification endpoint.
     street = state["raw_address"].split(",", 1)[0].strip()
     rest = state["raw_address"].split(",", 1)[1].strip() if "," in state["raw_address"] else ""
-    result = await fetch_zoning_attom(client, street, rest)
+    try:
+        result = await fetch_zoning_attom(client, street, rest)
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("fetch_zoning failed for address %r: %s", street, exc)
+        return {"zoning": None}
     return {"zoning": result}
 
 
@@ -115,7 +135,11 @@ async def _determine_tax_status(state: TraceState, client: httpx.AsyncClient) ->
     if not parcel:
         return {"tax_status": None}
     if _is_philadelphia(state):
-        status = await fetch_tax_status_opa(client, parcel.parcel_id)
+        try:
+            status = await fetch_tax_status_opa(client, parcel.parcel_id)
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            logger.warning("determine_tax_status (OPA) failed for parcel %s: %s", parcel.parcel_id, exc)
+            return {"tax_status": None}
         return {"tax_status": status}
     tax_liens = [lien for lien in state.get("liens", []) if _TAX_LIEN_TYPE_MARKER in lien.lien_type.lower()]
     if not tax_liens:
@@ -135,7 +159,11 @@ async def _fetch_flood_zone(state: TraceState, client: httpx.AsyncClient) -> dic
     if not parcel or parcel.latitude is None or parcel.longitude is None:
         # No resolvable coordinates -- omit the field rather than guess.
         return {"flood_zone": None}
-    result = await fetch_flood_zone(client, parcel.latitude, parcel.longitude)
+    try:
+        result = await fetch_flood_zone(client, parcel.latitude, parcel.longitude)
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("fetch_flood_zone failed for parcel %s: %s", parcel.parcel_id, exc)
+        return {"flood_zone": None}
     return {"flood_zone": result}
 
 
@@ -166,9 +194,13 @@ async def _fetch_lienholder_detail(state: TraceState, client: httpx.AsyncClient)
     parcel = state.get("parcel")
     if not parcel:
         return {"lienholder_details": []}
-    details = await fetch_lienholder_details_attom(
-        client, parcel.parcel_id, state.get("state") or "PA"
-    )
+    try:
+        details = await fetch_lienholder_details_attom(
+            client, parcel.parcel_id, state.get("state") or "PA"
+        )
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("fetch_lienholder_detail failed for parcel %s: %s", parcel.parcel_id, exc)
+        return {"lienholder_details": []}
     return {"lienholder_details": details}
 
 
@@ -176,9 +208,13 @@ async def _fetch_tax_claim_detail(state: TraceState, client: httpx.AsyncClient) 
     parcel = state.get("parcel")
     if not parcel:
         return {"tax_claim_detail": None}
-    detail = await fetch_tax_claim_detail_attom(
-        client, parcel.parcel_id, state.get("state") or "PA"
-    )
+    try:
+        detail = await fetch_tax_claim_detail_attom(
+            client, parcel.parcel_id, state.get("state") or "PA"
+        )
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        logger.warning("fetch_tax_claim_detail failed for parcel %s: %s", parcel.parcel_id, exc)
+        return {"tax_claim_detail": None}
     return {"tax_claim_detail": detail}
 
 

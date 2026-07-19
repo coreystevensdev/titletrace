@@ -10,6 +10,7 @@ on 429 to stay within rate limits.
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import httpx
@@ -107,32 +108,59 @@ async def fetch_ownership_attom(
     return records
 
 
-async def search_liens_attom(
-    client: httpx.AsyncClient,
-    apn: str,
-    state: str,
-) -> list[LienResult]:
-    """Retrieve lien data for a parcel from ATTOM."""
+_ENCUMBRANCE_LIEN_TYPE = "encumbrance"
+
+# search_liens_attom and search_encumbrances_attom both read /alllien/detail
+# and only differ in which lienType they keep, so they share one in-flight
+# fetch per (apn, state) instead of hitting ATTOM's 200-calls/month free tier
+# twice for the same data. The two graph nodes calling these run concurrently
+# in the same parallel fan-out step, so the second caller usually joins the
+# first's request rather than starting its own.
+_inflight_lien_fetches: dict[tuple[str, str], asyncio.Task] = {}
+
+
+async def _get_lien_items(client: httpx.AsyncClient, apn: str, state: str) -> list[dict]:
     data = await get_json(
         client,
         f"{_ATTOM_BASE}/alllien/detail",
         params={"apn": apn, "state": state},
         headers=_headers(),
     )
-    liens = []
-    for item in data.get("property", []):
-        for lien in item.get("liens", []):
-            liens.append(
-                LienResult(
-                    lien_type=lien.get("lienType", "unknown"),
-                    amount=float(lien["lienAmt"]) if lien.get("lienAmt") else None,
-                    recorded_date=lien.get("recordingDate"),
-                    lienholder=lien.get("lienHolderName"),
-                    status=lien.get("lienStatus", "unknown"),
-                    source="ATTOM",
-                )
-            )
-    return liens
+    items: list[dict] = []
+    for prop in data.get("property", []):
+        items.extend(prop.get("liens", []))
+    return items
+
+
+async def _fetch_lien_items_attom(client: httpx.AsyncClient, apn: str, state: str) -> list[dict]:
+    key = (apn, state)
+    task = _inflight_lien_fetches.get(key)
+    if task is None:
+        task = asyncio.ensure_future(_get_lien_items(client, apn, state))
+        _inflight_lien_fetches[key] = task
+        task.add_done_callback(lambda _: _inflight_lien_fetches.pop(key, None))
+    return await task
+
+
+async def search_liens_attom(
+    client: httpx.AsyncClient,
+    apn: str,
+    state: str,
+) -> list[LienResult]:
+    """Retrieve lien data for a parcel from ATTOM, excluding encumbrance-typed items."""
+    items = await _fetch_lien_items_attom(client, apn, state)
+    return [
+        LienResult(
+            lien_type=lien.get("lienType", "unknown"),
+            amount=float(lien["lienAmt"]) if lien.get("lienAmt") else None,
+            recorded_date=lien.get("recordingDate"),
+            lienholder=lien.get("lienHolderName"),
+            status=lien.get("lienStatus", "unknown"),
+            source="ATTOM",
+        )
+        for lien in items
+        if lien.get("lienType", "").lower() != _ENCUMBRANCE_LIEN_TYPE
+    ]
 
 
 async def search_encumbrances_attom(
@@ -140,25 +168,18 @@ async def search_encumbrances_attom(
     apn: str,
     state: str,
 ) -> list[EncumbranceResult]:
-    """Retrieve encumbrance data for a parcel from ATTOM."""
-    data = await get_json(
-        client,
-        f"{_ATTOM_BASE}/alllien/detail",
-        params={"apn": apn, "state": state, "lienType": "encumbrance"},
-        headers=_headers(),
-    )
-    results = []
-    for item in data.get("property", []):
-        for enc in item.get("liens", []):
-            results.append(
-                EncumbranceResult(
-                    encumbrance_type=enc.get("lienType", "unknown"),
-                    description=enc.get("lienComment"),
-                    recorded_date=enc.get("recordingDate"),
-                    source="ATTOM",
-                )
-            )
-    return results
+    """Retrieve encumbrance data for a parcel from ATTOM, i.e. the encumbrance-typed items."""
+    items = await _fetch_lien_items_attom(client, apn, state)
+    return [
+        EncumbranceResult(
+            encumbrance_type=enc.get("lienType", "unknown"),
+            description=enc.get("lienComment"),
+            recorded_date=enc.get("recordingDate"),
+            source="ATTOM",
+        )
+        for enc in items
+        if enc.get("lienType", "").lower() == _ENCUMBRANCE_LIEN_TYPE
+    ]
 
 
 async def fetch_zoning_attom(
