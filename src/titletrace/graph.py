@@ -102,11 +102,11 @@ async def _check_tax(state: TraceState, client: httpx.AsyncClient) -> dict:
 
 async def _fetch_flood_zone(state: TraceState, client: httpx.AsyncClient) -> dict:
     parcel = state.get("parcel")
-    if not parcel:
+    if not parcel or parcel.latitude is None or parcel.longitude is None:
+        # No resolvable coordinates -- omit the field rather than guess.
         return {"flood_zone": None}
-    # Derive lat/lon from parcel address via ATTOM geocode in production.
-    # FEMA NFHL requires lat/lon; placeholder returns None until geocoding is wired.
-    return {"flood_zone": None}
+    result = await fetch_flood_zone(client, parcel.latitude, parcel.longitude)
+    return {"flood_zone": result}
 
 
 def _route_after_parcel(state: TraceState):
