@@ -5,10 +5,14 @@ Topology:
       |
   fetch_parcel --(error)--> END
       |
-  [parallel Send fan-out -- all 6 run concurrently]
+  [parallel Send fan-out -- all 5 run concurrently]
     fetch_ownership | search_liens | search_encumbrances
-    fetch_zoning    | check_tax    | fetch_flood_zone
-      |                |
+    fetch_zoning     | fetch_flood_zone
+      |
+  determine_tax_status (Philadelphia: OPA lookup; elsewhere: derived from
+                         search_liens's already-fetched lien list -- no new
+                         ATTOM call)
+      |
   (liens?)        (tax delinquent?)
       |                |
   fetch_lienholder  fetch_tax_claim
@@ -19,9 +23,12 @@ Topology:
               |
             END
 
-The six parallel nodes use LangGraph's Send API so they execute concurrently
-with no inter-node dependency. Each returns a partial state update. The
-annotated reducer on TraceState merges them.
+Five of the original six parallel nodes still use LangGraph's Send API to
+execute concurrently with no inter-node dependency. Tax-status determination
+was moved out of the parallel set: for non-Philadelphia parcels it depends on
+search_liens's result, so it now runs as a sequential step immediately after
+the fan-in of the five remaining parallel nodes, before the existing
+lien/tax-claim conditional routing.
 """
 
 from __future__ import annotations
@@ -49,7 +56,7 @@ from titletrace.clients.opa import (
 from titletrace.nodes.fetch_parcel import _is_philadelphia, fetch_parcel
 from titletrace.nodes.parse_address import parse_address
 from titletrace.nodes.synthesize_report import synthesize_report
-from titletrace.state import TraceState
+from titletrace.state import TaxStatus, TraceState
 
 async def _fetch_ownership(state: TraceState, client: httpx.AsyncClient) -> dict:
     parcel = state.get("parcel")
@@ -89,15 +96,38 @@ async def _fetch_zoning(state: TraceState, client: httpx.AsyncClient) -> dict:
     return {"zoning": result}
 
 
-async def _check_tax(state: TraceState, client: httpx.AsyncClient) -> dict:
+_TAX_LIEN_TYPE_MARKER = "tax"
+
+
+async def _determine_tax_status(state: TraceState, client: httpx.AsyncClient) -> dict:
+    """Runs after the parallel fan-out (not inside it) so the non-Philadelphia
+    branch can reuse search_liens's already-fetched lien list instead of
+    issuing a fifth call against ATTOM's /alllien/detail endpoint -- the same
+    endpoint four other nodes already hit per trace, against a 200-calls/
+    month free tier.
+
+    Philadelphia keeps its existing OPA-based lookup unchanged. Everywhere
+    else, ATTOM has no dedicated delinquency endpoint: a tax lien recorded
+    against the parcel *is* the delinquency signal, so this scans the liens
+    already fetched in parallel rather than calling ATTOM again.
+    """
     parcel = state.get("parcel")
     if not parcel:
         return {"tax_status": None}
     if _is_philadelphia(state):
         status = await fetch_tax_status_opa(client, parcel.parcel_id)
         return {"tax_status": status}
-    # Non-Philly: ATTOM tax data not implemented in v1
-    return {"tax_status": None}
+    tax_liens = [lien for lien in state.get("liens", []) if _TAX_LIEN_TYPE_MARKER in lien.lien_type.lower()]
+    if not tax_liens:
+        return {"tax_status": TaxStatus(is_delinquent=False, source="ATTOM (derived from lien records)")}
+    lien = tax_liens[0]
+    return {
+        "tax_status": TaxStatus(
+            is_delinquent=True,
+            balance_due=lien.amount,
+            source="ATTOM (derived from lien records)",
+        )
+    }
 
 
 async def _fetch_flood_zone(state: TraceState, client: httpx.AsyncClient) -> dict:
@@ -117,7 +147,6 @@ def _route_after_parcel(state: TraceState):
         Send("search_liens", state),
         Send("search_encumbrances", state),
         Send("fetch_zoning", state),
-        Send("check_tax", state),
         Send("fetch_flood_zone", state),
     ]
 
@@ -164,8 +193,8 @@ def build_graph(client: httpx.AsyncClient) -> StateGraph:
     g.add_node("search_liens", partial(_search_liens, client=client))
     g.add_node("search_encumbrances", partial(_search_encumbrances, client=client))
     g.add_node("fetch_zoning", partial(_fetch_zoning, client=client))
-    g.add_node("check_tax", partial(_check_tax, client=client))
     g.add_node("fetch_flood_zone", partial(_fetch_flood_zone, client=client))
+    g.add_node("determine_tax_status", partial(_determine_tax_status, client=client))
     g.add_node("fetch_lienholder_detail", partial(_fetch_lienholder_detail, client=client))
     g.add_node("fetch_tax_claim_detail", partial(_fetch_tax_claim_detail, client=client))
     g.add_node("synthesize_report", synthesize_report)
@@ -174,16 +203,19 @@ def build_graph(client: httpx.AsyncClient) -> StateGraph:
     g.add_edge("parse_address", "fetch_parcel")
     g.add_conditional_edges("fetch_parcel", _route_after_parcel)
 
-    # Fan-in: all six parallel nodes feed back into a conditional edge
+    # Fan-in: all five parallel nodes feed into determine_tax_status, which
+    # runs once tax_status can be computed (Philadelphia via OPA, everywhere
+    # else derived from search_liens's already-fetched lien list), then
+    # routes on to the lienholder/tax-claim conditional branch.
     for fan_node in (
         "fetch_ownership",
         "search_liens",
         "search_encumbrances",
         "fetch_zoning",
-        "check_tax",
         "fetch_flood_zone",
     ):
-        g.add_conditional_edges(fan_node, _route_after_fanin)
+        g.add_edge(fan_node, "determine_tax_status")
+    g.add_conditional_edges("determine_tax_status", _route_after_fanin)
 
     g.add_edge("fetch_lienholder_detail", "synthesize_report")
     g.add_edge("fetch_tax_claim_detail", "synthesize_report")
