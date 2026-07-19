@@ -12,7 +12,6 @@ import httpx
 import pytest
 import respx
 
-from titletrace.clients.attom import _ATTOM_BASE
 from titletrace.clients.fema import _FEMA_BASE
 from titletrace.graph import _determine_tax_status, _fetch_flood_zone
 from titletrace.state import LienResult, ParcelResult

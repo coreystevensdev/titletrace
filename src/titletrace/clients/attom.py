@@ -221,7 +221,7 @@ async def fetch_tax_claim_detail_attom(
     state: str,
 ) -> TaxClaimDetail | None:
     """Fetch tax lien claim detail from ATTOM; filters to taxlien type, returns first match."""
-    # Called only after check_tax confirmed delinquency. An empty response means
+    # Called only after determine_tax_status confirmed delinquency. An empty response means
     # the lien is not yet recorded in ATTOM due to county recording lag.
     data = await get_json(
         client,

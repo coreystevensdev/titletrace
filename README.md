@@ -30,11 +30,11 @@ flowchart TD
     B --> C2[search_liens]
     B --> C3[search_encumbrances]
     B --> C4[fetch_zoning]
-    B --> C5[check_tax]
     B --> C6[fetch_flood_zone]
-    C2 -->|liens found| D1[fetch_lienholder_detail]
+    C1 & C2 & C3 & C4 & C6 --> C5[determine_tax_status]
+    C5 -->|liens found| D1[fetch_lienholder_detail]
     C5 -->|tax delinquent| D2[fetch_tax_claim_detail]
-    C1 & C3 & C4 & C6 --> E[synthesize_report]
+    C5 -->|neither| E[synthesize_report]
     D1 & D2 --> E
     E --> Z
 ```
