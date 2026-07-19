@@ -54,6 +54,48 @@ async def test_fetch_parcel_opa_not_found(client):
 
 
 @pytest.mark.asyncio
+async def test_fetch_parcel_opa_includes_coordinates_when_present(client):
+    payload = [
+        {
+            "parcel_number": "884000100",
+            "location": "1234 MARKET ST",
+            "zip_code": "19107",
+            "owner_1": "SMITH JOHN",
+            "total_area": "1200",
+            "year_built": "1920",
+            "category_code_description": "ROW W/OFF STREET PARKING",
+            "lat": "39.952740",
+            "lng": "-75.163590",
+        }
+    ]
+    with respx.mock:
+        respx.get(_PARCEL_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
+        result = await fetch_parcel_opa(client, "1234 MARKET ST")
+
+    assert result is not None
+    assert result.latitude == pytest.approx(39.952740)
+    assert result.longitude == pytest.approx(-75.163590)
+
+
+@pytest.mark.asyncio
+async def test_fetch_parcel_opa_missing_coordinates_is_none(client):
+    payload = [
+        {
+            "parcel_number": "884000100",
+            "location": "1234 MARKET ST",
+            "zip_code": "19107",
+        }
+    ]
+    with respx.mock:
+        respx.get(_PARCEL_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
+        result = await fetch_parcel_opa(client, "1234 MARKET ST")
+
+    assert result is not None
+    assert result.latitude is None
+    assert result.longitude is None
+
+
+@pytest.mark.asyncio
 async def test_fetch_tax_status_opa_delinquent(client):
     payload = [
         {

@@ -22,6 +22,15 @@ _TAX_ENDPOINT = f"{_OPA_BASE}/3qem-6v3v.json"
 _TRANSFER_ENDPOINT = f"{_OPA_BASE}/2upd-bkgb.json"
 
 
+def _parse_coordinate(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 async def fetch_parcel_opa(
     client: httpx.AsyncClient,
     address: str,
@@ -45,6 +54,10 @@ async def fetch_parcel_opa(
         lot_size_sqft=float(r["total_area"]) if r.get("total_area") else None,
         year_built=int(r["year_built"]) if r.get("year_built") else None,
         land_use=r.get("category_code_description"),
+        # Field names "lat"/"lng" are an educated guess for this dataset,
+        # not live-verified -- see the ParcelResult docstring in state.py.
+        latitude=_parse_coordinate(r.get("lat")),
+        longitude=_parse_coordinate(r.get("lng")),
         source="Philadelphia OPA",
     )
 

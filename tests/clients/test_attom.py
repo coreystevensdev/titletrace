@@ -41,6 +41,7 @@ async def test_fetch_parcel_attom_success(client):
                     "countrySubd": "NJ",
                     "postal1": "08608",
                 },
+                "location": {"latitude": "40.221583", "longitude": "-74.762307"},
                 "lot": {"lotSize1": "8000"},
                 "summary": {"yearBuilt": "1985", "propSubType": "SFR"},
                 "owner": {"owner1": {"fullName": "JOHNSON ALICE"}},
@@ -58,7 +59,28 @@ async def test_fetch_parcel_attom_success(client):
     assert result.owner_name == "JOHNSON ALICE"
     assert result.year_built == 1985
     assert result.lot_size_sqft == 8000.0
+    assert result.latitude == pytest.approx(40.221583)
+    assert result.longitude == pytest.approx(-74.762307)
     assert result.source == "ATTOM"
+
+
+@pytest.mark.asyncio
+async def test_fetch_parcel_attom_missing_location_is_none(client):
+    payload = {
+        "property": [
+            {
+                "identifier": {"apn": "NJ-002-XYZ"},
+                "address": {"line1": "1 Test Ave", "city": "Newark", "countrySubd": "NJ", "postal1": "07102"},
+            }
+        ]
+    }
+    with respx.mock:
+        respx.get(PARCEL_DETAIL_URL).mock(return_value=httpx.Response(200, json=payload))
+        result = await fetch_parcel_attom(client, "1 Test Ave", "Newark, NJ 07102")
+
+    assert result is not None
+    assert result.latitude is None
+    assert result.longitude is None
 
 
 @pytest.mark.asyncio

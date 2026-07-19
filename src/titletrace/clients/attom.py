@@ -33,6 +33,15 @@ def _headers() -> dict[str, str]:
     return {"apikey": key, "accept": "application/json"}
 
 
+def _parse_coordinate(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 async def fetch_parcel_attom(
     client: httpx.AsyncClient,
     address1: str,
@@ -53,6 +62,7 @@ async def fetch_parcel_attom(
     address = p.get("address", {})
     lot = p.get("lot", {})
     summary = p.get("summary", {})
+    location = p.get("location", {})
     return ParcelResult(
         parcel_id=identifier.get("apn", ""),
         address=address.get("line1", address1),
@@ -63,6 +73,8 @@ async def fetch_parcel_attom(
         lot_size_sqft=float(lot["lotSize1"]) if lot.get("lotSize1") else None,
         year_built=int(summary["yearBuilt"]) if summary.get("yearBuilt") else None,
         land_use=summary.get("propSubType"),
+        latitude=_parse_coordinate(location.get("latitude")),
+        longitude=_parse_coordinate(location.get("longitude")),
         source="ATTOM",
     )
 

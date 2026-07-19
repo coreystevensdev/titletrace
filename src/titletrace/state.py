@@ -24,6 +24,14 @@ class ParcelResult(BaseModel):
     lot_size_sqft: float | None = None
     year_built: int | None = None
     land_use: str | None = None
+    # ATTOM's /property/detail response includes these under a `location`
+    # block (confirmed against ATTOM's public API docs). Philadelphia's OPA
+    # dataset is assumed to expose "lat"/"lng" top-level fields -- this could
+    # not be live-verified (data.phila.gov returned HTTP 403 to this
+    # session's sandbox IP), so treat it as an educated guess, not a
+    # confirmed fact, until a real OPA response is captured.
+    latitude: float | None = None
+    longitude: float | None = None
     source: str
 
 
