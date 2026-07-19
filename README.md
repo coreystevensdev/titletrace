@@ -3,7 +3,7 @@
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
 ![50 tests](https://img.shields.io/badge/tests-50-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 6 parallel data lookups, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 50 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 50 tests (pytest + respx).
 
 ```bash
 docker compose up --build
