@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![50 tests](https://img.shields.io/badge/tests-50-brightgreen)
+![65 tests](https://img.shields.io/badge/tests-65-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 50 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 65 tests (pytest + respx).
 
 ```bash
 docker compose up --build
@@ -91,7 +91,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-All 50 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
+All 65 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
