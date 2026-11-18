@@ -11,7 +11,7 @@ import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from titletrace.api.main import get_http_client
+from titletrace.api.http_client import get_http_client
 from titletrace.graph import build_graph
 from titletrace.state import TraceState
 

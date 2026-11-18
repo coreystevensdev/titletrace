@@ -4,27 +4,17 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import FastAPI
 
+from titletrace.api.http_client import close_http_client, open_http_client
 from titletrace.api.routes import router
-
-_http_client: httpx.AsyncClient | None = None
-
-
-def get_http_client() -> httpx.AsyncClient:
-    if _http_client is None:
-        raise RuntimeError("HTTP client not initialized")
-    return _http_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _http_client
-    _http_client = httpx.AsyncClient()
+    open_http_client()
     yield
-    await _http_client.aclose()
-    _http_client = None
+    await close_http_client()
 
 
 app = FastAPI(
