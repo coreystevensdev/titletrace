@@ -1,4 +1,4 @@
-"""synthesize_report node -- always runs, even with partial data.
+"""synthesize_report node. Always runs, even with partial data.
 
 Calls Claude to produce a structured TraceReport. Partial or unavailable data
 surfaces as explicit data_gaps entries, never as silent omission. The prompt
@@ -106,7 +106,7 @@ def _build_prompt(state: TraceState) -> str:
         f"Zoning: {zoning.zoning_code + ' (' + (zoning.zoning_description or '') + ')' if zoning else 'unavailable'}"
     )
     sections.append(
-        f"Flood zone: {flood.zone_designation + ' -- ' + flood.zone_description if flood else 'unavailable'}"
+        f"Flood zone: {flood.zone_designation + ': ' + flood.zone_description if flood else 'unavailable'}"
     )
 
     return (
