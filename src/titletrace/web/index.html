@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TitleTrace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Karla:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23E6E8E3'/><path d='M8 2l5 4v8H3V6z' fill='none' stroke='%23C2501B' stroke-width='1.6'/></svg>">
+<style>
+:root {
+  --ground: #E6E8E3;
+  --surface: #F4F5F2;
+  --surface-2: #DDE0DA;
+  --ink: #1B211F;
+  --ink-soft: #414B47;
+  --muted: #6B756F;
+  --rule: #C3C8C0;
+  --rule-soft: #D5D9D1;
+
+  /* The one signature colour. Interactive states and editorial emphasis only,
+     never status: status has its own tokens below so a lien can never be
+     mistaken for a button. */
+  --accent: #C2501B;
+  --accent-ink: #FFFFFF;
+  --accent-wash: #F6E3D8;
+
+  /* Restricted semantic set. Allowed on the trace panels and the flood strip,
+     banned everywhere else. */
+  --flood: #1F6F8B;
+  --flood-wash: #DCE9EE;
+  --encumbrance: #8A3A2E;
+  --encumbrance-wash: #F2E0DC;
+  --clear: #3F6B4A;
+  --clear-wash: #E0EBE2;
+
+  --display: "Zilla Slab", Georgia, serif;
+  --body: "Karla", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Spline Sans Mono", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #151917;
+    --surface: #1D2320;
+    --surface-2: #262D29;
+    --ink: #E8ECE8;
+    --ink-soft: #BDC5BF;
+    --muted: #8A948D;
+    --rule: #333C37;
+    --rule-soft: #2A322D;
+    --accent: #E8793F;
+    --accent-ink: #1B211F;
+    --accent-wash: #33231A;
+    --flood: #6FB3C9;
+    --flood-wash: #17282E;
+    --encumbrance: #D98A7B;
+    --encumbrance-wash: #2E1D19;
+    --clear: #85B795;
+    --clear-wash: #17261B;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #151917;
+  --surface: #1D2320;
+  --surface-2: #262D29;
+  --ink: #E8ECE8;
+  --ink-soft: #BDC5BF;
+  --muted: #8A948D;
+  --rule: #333C37;
+  --rule-soft: #2A322D;
+  --accent: #E8793F;
+  --accent-ink: #1B211F;
+  --accent-wash: #33231A;
+  --flood: #6FB3C9;
+  --flood-wash: #17282E;
+  --encumbrance: #D98A7B;
+  --encumbrance-wash: #2E1D19;
+  --clear: #85B795;
+  --clear-wash: #17261B;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 32px 22px 72px; }
+
+header { border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 26px; }
+.brandline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+h1 {
+  font-family: var(--display); font-weight: 700; font-size: 31px;
+  letter-spacing: -.012em; margin: 0;
+}
+h1 .mark { color: var(--accent); }
+.tag { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.lede { margin: 10px 0 0; color: var(--ink-soft); max-width: 62ch; }
+
+/* Query */
+.query { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.field { display: flex; gap: 10px; flex-wrap: wrap; }
+input[type=text] {
+  flex: 1 1 320px; min-width: 0;
+  font-family: var(--mono); font-size: 14.5px;
+  padding: 12px 14px;
+  background: var(--surface); color: var(--ink);
+  border: 1.5px solid var(--rule); border-radius: 3px;
+}
+input[type=text]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+button {
+  font-family: var(--display); font-weight: 600; font-size: 15px;
+  padding: 12px 22px; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink);
+  border: 1.5px solid var(--accent); border-radius: 3px;
+}
+button:hover { filter: brightness(1.07); }
+button:disabled { opacity: .55; cursor: progress; }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chips .lbl { font-family: var(--mono); font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.chip {
+  font-family: var(--mono); font-size: 12.5px; padding: 6px 11px; cursor: pointer;
+  background: transparent; color: var(--ink-soft);
+  border: 1px solid var(--rule); border-radius: 999px;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Mode strip */
+.mode {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: 3px; padding: 12px 16px; margin-bottom: 24px;
+}
+.mode .badge {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 2px;
+  background: var(--accent-wash); color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.mode .why { color: var(--ink-soft); font-size: 14px; flex: 1 1 280px; }
+.meter { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.meter .bar { width: 94px; height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.meter .fill { height: 100%; background: var(--accent); width: 0%; }
+
+/* Trace */
+.trace { display: none; }
+.trace.on { display: block; }
+
+.step { position: relative; padding-left: 30px; padding-bottom: 22px; }
+.step::before {
+  content: ""; position: absolute; left: 8px; top: 7px; bottom: -4px;
+  width: 2px; background: var(--rule);
+}
+.step:last-child::before { display: none; }
+.step::after {
+  content: ""; position: absolute; left: 3px; top: 5px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--ground); border: 2px solid var(--accent);
+}
+.step.skipped::after { border-color: var(--rule); }
+
+.step h2 {
+  font-family: var(--display); font-weight: 600; font-size: 15px;
+  letter-spacing: .01em; margin: 0 0 3px;
+}
+.step .note { font-size: 13.5px; color: var(--muted); margin: 0 0 11px; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 3px; padding: 15px 17px;
+}
+
+dl.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; }
+dl.facts dt {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
+}
+dl.facts dd { margin: 0; font-size: 14.5px; }
+dl.facts dd.id { font-family: var(--mono); font-size: 13.5px; }
+
+/* The five parallel lookups, laid out as parallel */
+.fan { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 10px; }
+.fan .cell {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 3px;
+  padding: 12px 14px; border-top: 3px solid var(--rule);
+}
+.fan .cell h3 {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  margin: 0 0 7px;
+}
+.fan .cell .big { font-family: var(--display); font-size: 21px; font-weight: 600; line-height: 1.1; }
+.fan .cell .sub { font-size: 13px; color: var(--ink-soft); margin-top: 3px; }
+.fan .cell.has { border-top-color: var(--encumbrance); }
+.fan .cell.has .big { color: var(--encumbrance); }
+.fan .cell.none { border-top-color: var(--clear); }
+.fan .cell.none .big { color: var(--clear); }
+.fan .cell.flood { border-top-color: var(--flood); }
+.fan .cell.flood .big { color: var(--flood); }
+
+table.rows { width: 100%; border-collapse: collapse; }
+table.rows th {
+  text-align: left; font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  padding: 0 12px 7px 0; border-bottom: 1px solid var(--rule);
+}
+table.rows td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule-soft); font-size: 14px; vertical-align: top; }
+table.rows tr:last-child td { border-bottom: none; }
+td.amt { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.kind { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+
+.verdict {
+  display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; padding: 3px 9px; border-radius: 2px;
+}
+.verdict.bad { background: var(--encumbrance-wash); color: var(--encumbrance); }
+.verdict.good { background: var(--clear-wash); color: var(--clear); }
+
+pre.prompt {
+  margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+  white-space: pre-wrap; word-break: break-word; color: var(--ink-soft);
+  max-height: 340px; overflow-y: auto;
+}
+
+.msg {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 4px solid var(--encumbrance); border-radius: 3px;
+  padding: 14px 17px; margin-bottom: 20px; color: var(--ink-soft); font-size: 14.5px;
+}
+.msg.hidden { display: none; }
+
+footer {
+  margin-top: 46px; padding-top: 18px; border-top: 1px solid var(--rule);
+  font-size: 13.5px; color: var(--muted);
+}
+footer a { color: var(--accent); }
+
+/* One orchestrated reveal. The five lookups genuinely resolve together, so
+   they arrive together, staggered just enough to read as five things. */
+@keyframes rise { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+.trace.on .step { animation: rise .34s ease-out backwards; }
+.trace.on .step:nth-child(1) { animation-delay: .02s; }
+.trace.on .step:nth-child(2) { animation-delay: .08s; }
+.trace.on .step:nth-child(3) { animation-delay: .14s; }
+.trace.on .step:nth-child(4) { animation-delay: .20s; }
+.trace.on .step:nth-child(5) { animation-delay: .26s; }
+.trace.on .step:nth-child(6) { animation-delay: .32s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+@media (max-width: 620px) {
+  .wrap { padding: 24px 15px 56px; }
+  dl.facts { grid-template-columns: 1fr; gap: 2px 0; }
+  dl.facts dd { margin-bottom: 9px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brandline">
+    <h1>Title<span class="mark">Trace</span></h1>
+    <span class="tag">PA &amp; NJ · parcel, deeds, liens, zoning, flood</span>
+  </div>
+  <p class="lede">
+    Give it a street address and it assembles what the public record says about the property:
+    who owns it, who has a claim on it, and whether FEMA has it in a flood zone.
+  </p>
+</header>
+
+<form class="query" id="form">
+  <div class="field">
+    <label for="addr" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Street address</label>
+    <input type="text" id="addr" name="addr" autocomplete="off" spellcheck="false"
+           placeholder="812 Morris Rd, Wayne, PA 19087">
+    <button type="submit" id="go">Trace title</button>
+  </div>
+  <div class="chips">
+    <span class="lbl">Try</span>
+    <button type="button" class="chip" data-a="1201 Chestnut St, Philadelphia, PA 19107">Philadelphia, delinquent</button>
+    <button type="button" class="chip" data-a="45 Lafayette Ave, Haddonfield, NJ 08033">Haddonfield, clear</button>
+    <button type="button" class="chip" data-a="812 Morris Rd, Wayne, PA 19087">Wayne, two liens</button>
+  </div>
+</form>
+
+<div class="mode" id="mode" hidden>
+  <span class="badge" id="modeBadge">recorded</span>
+  <span class="why" id="modeWhy"></span>
+  <span class="meter" title="Model budget used this month">
+    <span class="bar"><span class="fill" id="budgetFill"></span></span>
+    <span id="budgetText"></span>
+  </span>
+</div>
+
+<div class="msg hidden" id="msg"></div>
+
+<section class="trace" id="trace" aria-live="polite"></section>
+
+<footer>
+  <p id="timing"></p>
+  <p>
+    A LangGraph agent: one parcel lookup, then five sources queried in parallel, then a
+    conditional branch that only runs when something is actually encumbered.
+    <a href="https://github.com/coreystevensdev/titletrace">Source</a>.
+  </p>
+</footer>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = (n) => n == null ? null : "$" + Number(n).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+function facts(pairs) {
+  const rows = pairs.filter(([, v]) => v != null && v !== "")
+    .map(([k, v, mono]) => `<dt>${esc(k)}</dt><dd class="${mono ? "id" : ""}">${esc(v)}</dd>`).join("");
+  return `<dl class="facts">${rows}</dl>`;
+}
+
+function step(title, note, body, skipped) {
+  return `<div class="step${skipped ? " skipped" : ""}">
+    <h2>${esc(title)}</h2>
+    <p class="note">${esc(note)}</p>
+    ${body}
+  </div>`;
+}
+
+function render(d) {
+  const out = [];
+
+  const p = d.parcel;
+  out.push(step(
+    "Parcel",
+    p ? `Identified through ${p.source}.` : "Not identified.",
+    `<div class="panel">${facts([
+      ["Parcel ID", p.parcel_id, true],
+      ["Owner", p.owner_name],
+      ["Address", [p.address, p.city, p.state, p.zip_code].filter(Boolean).join(", ")],
+      ["Built", p.year_built],
+      ["Lot", p.lot_size_sqft ? Number(p.lot_size_sqft).toLocaleString() + " sq ft" : null],
+      ["Coordinates", p.latitude != null ? `${p.latitude}, ${p.longitude}` : null, true],
+    ])}</div>`
+  ));
+
+  const liens = d.liens || [], encs = d.encumbrances || [], owners = d.ownership_history || [];
+  const fz = d.flood_zone, tax = d.tax_status, zoning = d.zoning;
+  const cell = (cls, label, big, sub) =>
+    `<div class="cell ${cls}"><h3>${esc(label)}</h3><div class="big">${esc(big)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`;
+
+  out.push(step(
+    "Five sources, in parallel",
+    "Fanned out with LangGraph's Send API once the parcel resolved, then joined.",
+    `<div class="fan">
+      ${cell(owners.length ? "" : "none", "Transfers", owners.length, owners.length ? "deeds on record" : "none found")}
+      ${cell(liens.length ? "has" : "none", "Liens", liens.length, liens.length ? "open claims" : "none recorded")}
+      ${cell(encs.length ? "has" : "none", "Encumbrances", encs.length, encs.length ? "easements, covenants" : "none recorded")}
+      ${cell("", "Zoning", zoning ? zoning.zoning_code : "n/a", zoning ? zoning.zoning_description : null)}
+      ${cell("flood", "Flood zone", fz ? fz.zone_designation : "n/a", fz ? fz.zone_description : null)}
+    </div>`
+  ));
+
+  if (fz && fz.firm_panel) {
+    out.push(step(
+      "FEMA FIRM panel",
+      "Zone and panel come from different NFHL layers, so this is a second query.",
+      `<div class="panel">${facts([
+        ["Panel", fz.firm_panel, true],
+        ["Effective", fz.effective_date, true],
+        ["Zone", `${fz.zone_designation}: ${fz.zone_description}`],
+      ])}</div>`
+    ));
+  }
+
+  if (tax) {
+    out.push(step(
+      "Tax status",
+      "Derived after the fan-in: from the city for Philadelphia, from the lien list everywhere else.",
+      `<div class="panel">
+        <span class="verdict ${tax.is_delinquent ? "bad" : "good"}">${tax.is_delinquent ? "Delinquent" : "Current"}</span>
+        ${tax.balance_due != null ? `<span style="margin-left:12px;font-family:var(--mono)">${esc(money(tax.balance_due))} due</span>` : ""}
+      </div>`
+    ));
+  }
+
+  if (liens.length) {
+    out.push(step(
+      "Claims on record",
+      "Each one is money someone else is owed against this parcel.",
+      `<div class="panel scroll"><table class="rows">
+        <thead><tr><th>Kind</th><th>Amount</th><th>Recorded</th><th>Holder</th></tr></thead>
+        <tbody>${liens.map(l => `<tr>
+          <td class="kind">${esc(l.lien_type)}</td>
+          <td class="amt">${esc(money(l.amount) ?? "not stated")}</td>
+          <td class="amt">${esc(l.recorded_date ?? "not stated")}</td>
+          <td>${esc(l.lienholder ?? "not stated")}</td></tr>`).join("")}
+        </tbody></table></div>`
+    ));
+  }
+
+  const drilled = (d.lienholder_details || []).length > 0 || d.tax_claim_detail;
+  out.push(step(
+    drilled ? "Drill-down ran" : "Drill-down skipped",
+    drilled
+      ? "The conditional branch fires only when there is something to chase."
+      : "Nothing encumbered, so the branch was not taken. That is the point of it being conditional.",
+    drilled
+      ? `<div class="panel">${facts([
+          ["Lienholders traced", (d.lienholder_details || []).length],
+          ["Tax claim detail", d.tax_claim_detail ? "retrieved" : null],
+        ])}</div>`
+      : "",
+    !drilled
+  ));
+
+  if (d.prompt) {
+    out.push(step(
+      "What the model would receive",
+      "Assembled from the state above by the same function the live path uses.",
+      `<div class="panel"><pre class="prompt">${esc(d.prompt)}</pre></div>`
+    ));
+  }
+
+  $("trace").innerHTML = out.join("");
+  $("trace").classList.add("on");
+}
+
+async function run(address) {
+  const btn = $("go");
+  btn.disabled = true;
+  btn.textContent = "Tracing";
+  $("msg").classList.add("hidden");
+  $("trace").classList.remove("on");
+
+  try {
+    const res = await fetch("/api/demo/trace", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({address}),
+    });
+    const d = await res.json();
+
+    $("mode").hidden = false;
+    $("modeBadge").textContent = d.mode;
+    $("modeWhy").textContent = d.mode_reason || "";
+    const b = d.budget || {};
+    if (b.monthly_budget_usd) {
+      const pct = Math.min(100, (b.monthly_spend_usd / b.monthly_budget_usd) * 100);
+      $("budgetFill").style.width = pct + "%";
+      $("budgetText").textContent = `$${b.monthly_spend_usd.toFixed(2)} / $${b.monthly_budget_usd.toFixed(2)}`;
+    }
+    $("timing").textContent = d.duration_ms != null ? `Traced in ${d.duration_ms} ms.` : "";
+
+    if (d.error || !d.parcel) {
+      $("msg").textContent = d.error || "No parcel found for that address.";
+      $("msg").classList.remove("hidden");
+      return;
+    }
+    render(d);
+  } catch (e) {
+    $("msg").textContent = "The trace could not be reached. The service may be restarting.";
+    $("msg").classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Trace title";
+  }
+}
+
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = $("addr").value.trim() || $("addr").placeholder;
+  run(v);
+});
+
+document.querySelectorAll(".chip").forEach(c =>
+  c.addEventListener("click", () => {
+    $("addr").value = c.dataset.a;
+    run(c.dataset.a);
+  })
+);
+</script>
+</body>
+</html>

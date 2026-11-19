@@ -112,4 +112,4 @@ async def test_a_high_risk_designation_survives_intact():
         result = await fetch_flood_zone(client, 39.89, -75.03)
 
     assert result.zone_designation == "AE"
-    assert "base flood elevation" in result.zone_description
+    assert "with base flood elevation" in result.zone_description

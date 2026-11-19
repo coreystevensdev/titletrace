@@ -1,6 +1,6 @@
 """FEMA NFHL ArcGIS REST client for flood zone designation.
 
-Uses the public FEMA National Flood Hazard Layer endpoint -- no API key
+Uses the public FEMA National Flood Hazard Layer endpoint, no API key
 required. Queries by longitude/latitude after geocoding the address.
 
 FEMA endpoint docs:
@@ -30,13 +30,13 @@ _PANEL_BASE = f"{_NFHL}/3/query"
 
 # Zone description lookup for common FEMA designations.
 _ZONE_DESCRIPTIONS: dict[str, str] = {
-    "A": "High risk -- 1% annual chance flood (no BFE determined)",
-    "AE": "High risk -- 1% annual chance flood with base flood elevation",
-    "AH": "High risk -- 1% annual chance flood, shallow ponding",
-    "AO": "High risk -- 1% annual chance flood, shallow sheet flow",
-    "V": "High risk coastal -- 1% annual chance with wave action",
-    "VE": "High risk coastal -- 1% annual chance with wave action and BFE",
-    "X": "Minimal/moderate risk -- outside 1% annual chance floodplain",
+    "A": "High risk, 1% annual chance flood, no base flood elevation determined",
+    "AE": "High risk, 1% annual chance flood with base flood elevation",
+    "AH": "High risk, 1% annual chance flood, shallow ponding",
+    "AO": "High risk, 1% annual chance flood, shallow sheet flow",
+    "V": "High risk coastal, 1% annual chance with wave action",
+    "VE": "High risk coastal, 1% annual chance with wave action and base flood elevation",
+    "X": "Minimal to moderate risk, outside the 1% annual chance floodplain",
     "D": "Undetermined risk",
 }
 

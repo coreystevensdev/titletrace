@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![101 tests](https://img.shields.io/badge/tests-101-brightgreen)
+![106 tests](https://img.shields.io/badge/tests-106-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 101 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 106 tests (pytest + respx).
 
 ```bash
 docker compose up --build
@@ -91,7 +91,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-All 101 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
+All 106 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
@@ -110,6 +110,8 @@ python eval/eval.py
 Requires both API keys for non-error cases to score parcel_found_rate above 0%.
 
 ## Public demo
+
+A browsable page at `/`: type an address, or take one of the three quick-picks, and the trace renders as the graph produced it. Parcel first, then the five parallel lookups shown as five, then the conditional drill-down, which visibly does not run when nothing is encumbered.
 
 The live trace cannot sit on an open URL. ATTOM's free tier is 200 calls a month and the synthesis step spends money per request, so anyone holding the button down would exhaust both.
 
