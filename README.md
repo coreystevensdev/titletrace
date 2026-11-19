@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![98 tests](https://img.shields.io/badge/tests-98-brightgreen)
+![101 tests](https://img.shields.io/badge/tests-101-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 98 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 101 tests (pytest + respx).
 
 ```bash
 docker compose up --build
@@ -91,7 +91,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-All 98 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
+All 101 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
@@ -137,6 +137,7 @@ Spend is guarded by [rolling-cost-cap](https://pypi.org/project/rolling-cost-cap
 | `TITLETRACE_CALL_CEILING_USD` | `0.25` | Refuses any single call estimated above this. |
 | `TITLETRACE_LIVE_TRACES_PER_MONTH` | `30` | Protects ATTOM's 200-call free tier, which has no dollar cost for the budget to see. |
 | `TITLETRACE_SPEND_LEDGER` | `/tmp/titletrace-spend.json` | Where the month's spend is kept across restarts. |
+| `TITLETRACE_QUOTA_LEDGER` | `/tmp/titletrace-quota.json` | Where the live-trace count is kept across restarts. |
 
 Three things make that number mean something.
 
@@ -145,6 +146,8 @@ The judgement and the reservation happen together under a lock, before the call.
 The reservation is the estimate and is never reconciled downwards, because the ledger is append-only. The estimate assumes the full `max_tokens`, so the budget drains ahead of real spend. That also means a call that times out is already paid for, which is correct: a timeout is not proof the tokens went unbilled.
 
 Spend is written to a file and reloaded at boot, because a container with `--restart=always` that crash-loops would otherwise be handed a fresh budget on every boot. A ledger that cannot be read is treated as a spent budget rather than an empty one.
+
+The trace quota keeps an in-process counter as a floor under the file. Reading the count back from storage alone means a write that failed leaves it at zero forever and live mode never stops, so a ledger that cannot be written switches live mode off rather than handing out an unbounded number of traces.
 
 One cap per process, not per request: a per-request cap caps nothing, since every visitor would arrive with a fresh budget. State is still per-process, so N workers can collectively spend N times the budget, which is the trade-off the library's own README names. This deployment runs one.
 

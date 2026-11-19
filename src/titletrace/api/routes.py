@@ -14,6 +14,7 @@ recorded trace is never mistaken for proof the deployment can do the live one.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -27,6 +28,8 @@ from titletrace.demo import RECORDED_ADDRESSES, demo_client
 from titletrace.graph import build_graph
 from titletrace.nodes.synthesize_report import _CAP, _build_prompt, synthesize_report
 from titletrace.state import TraceState
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -103,28 +106,66 @@ _LIVE_TRACES_PER_MONTH = int(os.environ.get("TITLETRACE_LIVE_TRACES_PER_MONTH", 
 _QUOTA_PATH = Path(os.environ.get("TITLETRACE_QUOTA_LEDGER", "/tmp/titletrace-quota.json"))
 
 
+# The file is where the count survives a restart; this is where it survives a
+# disk that will not take writes. Reading the count back from storage alone
+# means a failed write leaves it at zero forever, and live mode never stops.
+_counted_this_process = 0
+_counted_month = ""
+_quota_unwritable = False
+
+
+def _this_month() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
 def _live_traces_used() -> int:
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    """The higher of what this process counted and what the file says.
+
+    Neither alone is enough: the file misses a write that failed, and the
+    process counter misses everything from before the last restart.
+    """
+    month = _this_month()
+    in_process = _counted_this_process if _counted_month == month else 0
+
     try:
         saved = json.loads(_QUOTA_PATH.read_text())
     except FileNotFoundError:
-        return 0
+        on_disk = 0
     except (OSError, ValueError):
-        # Same posture as the spend ledger: unreadable is not evidence of unused.
+        # Unreadable is not evidence of unused.
         return _LIVE_TRACES_PER_MONTH
-    return int(saved.get("traces") or 0) if saved.get("month") == month else 0
+    else:
+        on_disk = int(saved.get("traces") or 0) if saved.get("month") == month else 0
+
+    return max(in_process, on_disk)
 
 
 def _record_live_trace() -> None:
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
-    payload = {"month": month, "traces": _live_traces_used() + 1}
+    """Read, increment, write. Keep this synchronous.
+
+    Its atomicity is only the event loop's: with no await inside it, it runs to
+    completion before another request is served. Adding one, async file I/O for
+    instance, reintroduces the read-modify-write race silently, and it would
+    need the same reservation the spend cap uses.
+    """
+    global _counted_this_process, _counted_month, _quota_unwritable
+
+    month = _this_month()
+    if _counted_month != month:
+        _counted_month, _counted_this_process, _quota_unwritable = month, 0, False
+    _counted_this_process = _live_traces_used() + 1
+
     try:
         _QUOTA_PATH.parent.mkdir(parents=True, exist_ok=True)
         tmp = _QUOTA_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload))
+        tmp.write_text(json.dumps({"month": month, "traces": _counted_this_process}))
         tmp.replace(_QUOTA_PATH)
     except OSError:
-        pass
+        # A quota that cannot be persisted is a quota that will be forgotten on
+        # the next restart, so stop handing out live traces rather than hand out
+        # an unbounded number of them.
+        logger.warning("quota_ledger_write_failed path=%s, live mode disabled", _QUOTA_PATH)
+        _quota_unwritable = True
 
 
 def _live_is_available() -> tuple[bool, str]:
@@ -134,6 +175,11 @@ def _live_is_available() -> tuple[bool, str]:
         return False, "No ATTOM key configured, so vendor lookups are served from recordings."
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return False, "No Anthropic key configured, so the report is not generated."
+    if _quota_unwritable:
+        return False, (
+            "The live-trace ledger cannot be written, so live mode is off until that is "
+            "fixed. An uncounted quota is one that gets forgotten on the next restart."
+        )
     used = _live_traces_used()
     if used >= _LIVE_TRACES_PER_MONTH:
         return False, (
