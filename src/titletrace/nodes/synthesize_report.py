@@ -8,8 +8,12 @@ forces a JSON tool call so the output is always machine-readable.
 from __future__ import annotations
 
 import json
+import asyncio
+import json
 import logging
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 import anthropic
 from rolling_cost_cap import CostCap
@@ -137,6 +141,58 @@ def _build_cap(monthly_budget: float | None = None) -> CostCap:
 # every visitor would arrive with a fresh budget.
 _CAP = _build_cap()
 
+# check() and record() are each locked, but a caller doing one then the other
+# leaves an await in between, and every request in flight reads the same
+# unspent budget. This serialises judge-and-reserve only; the model call
+# happens outside it, so concurrency survives.
+_RESERVE = asyncio.Lock()
+
+_LEDGER_PATH = Path(os.environ.get("TITLETRACE_SPEND_LEDGER", "/tmp/titletrace-spend.json"))
+
+
+def _restore_spend(cap: CostCap) -> None:
+    """Carry this month's spend across a restart.
+
+    Without it a crash loop hands out a fresh budget on every boot, which is
+    the one failure here that can actually run up a bill. An unreadable ledger
+    is treated as a spent budget rather than an empty one: a file we cannot
+    read is not evidence that nothing was spent.
+    """
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        saved = json.loads(_LEDGER_PATH.read_text())
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError):
+        logger.warning("spend_ledger_unreadable path=%s, assuming the budget is spent", _LEDGER_PATH)
+        cap.record(cap._monthly_budget or 0.0)
+        return
+
+    if saved.get("month") != month:
+        return
+    amount = float(saved.get("spend") or 0.0)
+    if amount > 0:
+        # Replayed as one entry. It restores the monthly total, which is the
+        # layer that matters here; the median window sees a single outlier.
+        cap.record(amount)
+
+
+def _persist_spend(cap: CostCap) -> None:
+    payload = {
+        "month": datetime.now(timezone.utc).strftime("%Y-%m"),
+        "spend": round(cap.monthly_spend, 6),
+    }
+    try:
+        _LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _LEDGER_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload))
+        tmp.replace(_LEDGER_PATH)
+    except OSError:
+        logger.warning("spend_ledger_write_failed path=%s", _LEDGER_PATH)
+
+
+_restore_spend(_CAP)
+
 
 def _cost(input_tokens: int, output_tokens: int) -> float:
     return (input_tokens / 1e6) * _INPUT_PER_MTOK + (output_tokens / 1e6) * _OUTPUT_PER_MTOK
@@ -167,27 +223,30 @@ async def synthesize_report(state: TraceState) -> dict:
     parcel = state.get("parcel")
     prompt = _build_prompt(state)
 
-    # Asked before the call, not after. evaluate() records a cost that has
-    # already been spent, which is the right shape for metering and the wrong
-    # one for a public URL where anyone can hold the button down.
-    verdict = _CAP.check(_estimate(prompt))
-    if not verdict.allowed:
-        logger.warning(
-            "synthesis_refused trip=%s observed=%.4f monthly_spend=%.4f",
-            verdict.trip, verdict.observed, verdict.monthly_spend,
-        )
-        return {"error": (
-            "Report generation is paused: this deployment's monthly model budget is spent. "
-            "The property data above was still gathered in full."
-        )}
+    # Judge and reserve together, before the call. evaluate() is the wrong tool
+    # twice over: it records a cost already spent, and it records even when it
+    # refuses, so a budget at its limit keeps inflating on requests it denied.
+    estimate = _estimate(prompt)
+    async with _RESERVE:
+        verdict = _CAP.check(estimate)
+        if not verdict.allowed:
+            logger.warning(
+                "synthesis_refused trip=%s observed=%.4f monthly_spend=%.4f",
+                verdict.trip, verdict.observed, verdict.monthly_spend,
+            )
+            return {"error": (
+                "Report generation is paused: this deployment's monthly model budget is spent. "
+                "The property data above was still gathered in full."
+            )}
+        _CAP.record(estimate)
+        _persist_spend(_CAP)
 
+    # Reserved rather than reconciled afterwards, because the ledger is
+    # append-only and a correction would have to be negative. The estimate
+    # assumes the full max_tokens, so the budget drains faster than real spend.
+    # That is the direction to be wrong in, and it means a call that raises is
+    # already paid for: a timeout is not proof the tokens went unbilled.
     response = await _call_model(prompt)
-
-    # The truth, not the estimate. An estimate recorded as spend would throttle
-    # the demo early; never recording would let real spend run past the budget.
-    usage = getattr(response, "usage", None)
-    if usage is not None:
-        _CAP.record(_cost(usage.input_tokens, usage.output_tokens))
 
     tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
     if not tool_use_blocks:

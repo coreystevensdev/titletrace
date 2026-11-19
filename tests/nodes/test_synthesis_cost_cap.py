@@ -14,7 +14,8 @@ from titletrace.nodes import synthesize_report as node
 
 
 @pytest.fixture(autouse=True)
-def fresh_cap(monkeypatch):
+def fresh_cap(monkeypatch, tmp_path):
+    monkeypatch.setattr(node, "_LEDGER_PATH", tmp_path / "spend.json")
     monkeypatch.setattr(node, "_CAP", node._build_cap(monthly_budget=1.00))
     monkeypatch.setattr(node, "_CLIENT", None)
     yield
@@ -54,9 +55,15 @@ async def test_an_exhausted_budget_refuses_before_the_api_call(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_the_recorded_cost_is_what_the_call_actually_used(monkeypatch):
-    """Not the estimate. An estimate that runs high would throttle the demo
-    early; one that runs low would let real spend drift past the budget."""
+async def test_the_reserved_cost_is_the_estimate_not_the_measured_usage(monkeypatch):
+    """This asserted the measured usage until the reservation landed.
+
+    Recording what the call actually used means recording it after the call,
+    and the await in between is the window every concurrent request passes
+    through on the same unspent budget. Reserving first closes that, and the
+    ledger is append-only so the over-reservation cannot be corrected back
+    down. The estimate assumes the full max_tokens, so the budget drains ahead
+    of real spend, which is the direction worth being wrong in."""
     class Usage:
         input_tokens = 2_000
         output_tokens = 500
@@ -78,8 +85,9 @@ async def test_the_recorded_cost_is_what_the_call_actually_used(monkeypatch):
     await node.synthesize_report(_state())
 
     spent = node._CAP.monthly_spend - before
-    expected = (2_000 / 1e6) * 3.00 + (500 / 1e6) * 15.00
-    assert spent == pytest.approx(expected, abs=1e-9), f"recorded {spent}, call cost {expected}"
+    measured = (2_000 / 1e6) * 3.00 + (500 / 1e6) * 15.00
+    assert spent == pytest.approx(node._estimate(node._build_prompt(_state())), abs=1e-9)
+    assert spent > measured, "the reservation must not undercount what the call could cost"
 
 
 @pytest.mark.asyncio

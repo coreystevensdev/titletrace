@@ -13,8 +13,11 @@ recorded trace is never mistaken for proof the deployment can do the live one.
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -93,6 +96,37 @@ def _blank_state(address: str) -> TraceState:
     }
 
 
+# ATTOM allows 200 calls a month on the free tier and charges nothing per call,
+# so the dollar cap cannot see it. A trace makes up to 5 ATTOM calls, so 30
+# live traces is about 150 calls, leaving headroom for development.
+_LIVE_TRACES_PER_MONTH = int(os.environ.get("TITLETRACE_LIVE_TRACES_PER_MONTH", "30"))
+_QUOTA_PATH = Path(os.environ.get("TITLETRACE_QUOTA_LEDGER", "/tmp/titletrace-quota.json"))
+
+
+def _live_traces_used() -> int:
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        saved = json.loads(_QUOTA_PATH.read_text())
+    except FileNotFoundError:
+        return 0
+    except (OSError, ValueError):
+        # Same posture as the spend ledger: unreadable is not evidence of unused.
+        return _LIVE_TRACES_PER_MONTH
+    return int(saved.get("traces") or 0) if saved.get("month") == month else 0
+
+
+def _record_live_trace() -> None:
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    payload = {"month": month, "traces": _live_traces_used() + 1}
+    try:
+        _QUOTA_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _QUOTA_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload))
+        tmp.replace(_QUOTA_PATH)
+    except OSError:
+        pass
+
+
 def _live_is_available() -> tuple[bool, str]:
     """Both keys and budget, or it is not live. Reported as a sentence because
     the page shows it: 'recorded' with no reason invites the reader to guess."""
@@ -100,6 +134,13 @@ def _live_is_available() -> tuple[bool, str]:
         return False, "No ATTOM key configured, so vendor lookups are served from recordings."
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return False, "No Anthropic key configured, so the report is not generated."
+    used = _live_traces_used()
+    if used >= _LIVE_TRACES_PER_MONTH:
+        return False, (
+            f"This month's live-trace share is used ({used} of {_LIVE_TRACES_PER_MONTH}), "
+            "so the trace is served from recordings. ATTOM's free tier is the quota being "
+            "protected, not a dollar budget."
+        )
     verdict = _CAP.check(0.0)
     if not verdict.allowed:
         return False, (
@@ -122,15 +163,16 @@ async def demo_trace(req: TraceRequest):
     t0 = time.monotonic()
 
     if live:
+        # Counted before the lookups, not after. A trace that crashes partway
+        # has still spent the ATTOM calls it made.
+        _record_live_trace()
         graph = build_graph(get_http_client(), synthesize=synthesize_report)
         result = await graph.ainvoke(_blank_state(address))
-        client_cm = None
     else:
         async def skip_synthesis(state):
             return {}
 
-        client_cm = demo_client()
-        async with client_cm as client:
+        async with demo_client() as client:
             graph = build_graph(client, synthesize=skip_synthesis)
             result = await graph.ainvoke(_blank_state(address))
 
