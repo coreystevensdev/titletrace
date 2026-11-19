@@ -4,17 +4,29 @@ Uses the public FEMA National Flood Hazard Layer endpoint -- no API key
 required. Queries by longitude/latitude after geocoding the address.
 
 FEMA endpoint docs:
-  https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer
+  https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer
+
+The zone and the panel come from two different layers. 28 (Flood Hazard Zones)
+has FLD_ZONE and ZONE_SUBTY; the FIRM panel id and its effective date are on 3
+(FIRM Panels). Asking 28 for them returns the feature with those columns absent,
+so the panel fields came back null on every lookup that otherwise worked.
 """
 
 from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
 
 import httpx
 
 from titletrace.clients._base import get_json
 from titletrace.state import FloodZoneResult
 
-_FEMA_BASE = "https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28/query"
+logger = logging.getLogger(__name__)
+
+_NFHL = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer"
+_FEMA_BASE = f"{_NFHL}/28/query"
+_PANEL_BASE = f"{_NFHL}/3/query"
 
 # Zone description lookup for common FEMA designations.
 _ZONE_DESCRIPTIONS: dict[str, str] = {
@@ -29,11 +41,50 @@ _ZONE_DESCRIPTIONS: dict[str, str] = {
 }
 
 
+def _sentence_case(text: str) -> str:
+    """FEMA ships these in caps. Title case puts a capital on "Of"."""
+    return text[0].upper() + text[1:].lower() if text else text
+
+
 def _zone_description(zone: str) -> str:
-    for prefix, desc in _ZONE_DESCRIPTIONS.items():
-        if zone.upper().startswith(prefix):
-            return desc
+    """Longest prefix wins. Shortest-first matched AE against A and reported
+    "no BFE determined" for a zone that has one, which is backwards on the
+    question a flood determination is asked."""
+    zone = zone.upper()
+    for prefix in sorted(_ZONE_DESCRIPTIONS, key=len, reverse=True):
+        if zone.startswith(prefix):
+            return _ZONE_DESCRIPTIONS[prefix]
     return "See FEMA FIRM panel for full designation"
+
+
+def _esri_date(value) -> str | None:
+    """ArcGIS returns date columns as epoch milliseconds, and the model wants a
+    string. Passing the integer through raises a ValidationError that surfaces
+    as a dead trace, since only fetch_parcel catches node exceptions."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).date().isoformat()
+
+
+async def _fetch_panel(client: httpx.AsyncClient, lat: float, lon: float) -> dict:
+    """FIRM panel id and effective date, from layer 3. Provenance for the zone
+    above it, so a failure here must not discard the zone itself."""
+    try:
+        data = await get_json(client, _PANEL_BASE, params={
+            "geometry": f"{lon},{lat}",
+            "geometryType": "esriGeometryPoint",
+            "spatialRel": "esriSpatialRelIntersects",
+            "outFields": "FIRM_PAN,EFF_DATE",
+            "returnGeometry": "false",
+            "f": "json",
+        })
+    except Exception:
+        logger.warning("fema_panel_lookup_failed lat=%s lon=%s", lat, lon)
+        return {}
+    features = data.get("features", [])
+    return features[0].get("attributes", {}) if features else {}
 
 
 async def fetch_flood_zone(
@@ -44,14 +95,13 @@ async def fetch_flood_zone(
     """Query FEMA NFHL for the flood zone at the given coordinates.
 
     Returns None when the point falls outside all FIRM panels (very rare for
-    PA/NJ addresses). Returns a FloodZoneResult with the zone designation and
-    effective date when found.
+    PA/NJ addresses).
     """
     params = {
         "geometry": f"{lon},{lat}",
         "geometryType": "esriGeometryPoint",
         "spatialRel": "esriSpatialRelIntersects",
-        "outFields": "FLD_ZONE,ZONE_SUBTY,FIRM_PANEL,EFF_DATE",
+        "outFields": "FLD_ZONE,ZONE_SUBTY",
         "returnGeometry": "false",
         "f": "json",
     }
@@ -60,12 +110,16 @@ async def fetch_flood_zone(
     if not features:
         return None
     attrs = features[0].get("attributes", {})
-    zone = attrs.get("FLD_ZONE", "")
-    subtype = attrs.get("ZONE_SUBTY", "") or ""
-    full_zone = f"{zone}{subtype}".strip() if subtype else zone
+    # FLD_ZONE already carries the whole designation: AE arrives as "AE". The
+    # old code appended ZONE_SUBTY to it, but that column is a sentence, so
+    # zone X came out as "XAREA OF MINIMAL FLOOD HAZARD".
+    zone = (attrs.get("FLD_ZONE") or "").strip()
+    subtype = (attrs.get("ZONE_SUBTY") or "").strip()
+
+    panel = await _fetch_panel(client, lat, lon)
     return FloodZoneResult(
-        zone_designation=full_zone or "Unknown",
-        zone_description=_zone_description(full_zone),
-        firm_panel=attrs.get("FIRM_PANEL"),
-        effective_date=attrs.get("EFF_DATE"),
+        zone_designation=zone or "Unknown",
+        zone_description=_sentence_case(subtype) if subtype else _zone_description(zone),
+        firm_panel=panel.get("FIRM_PAN") or panel.get("FIRM_PANEL"),
+        effective_date=_esri_date(panel.get("EFF_DATE")),
     )

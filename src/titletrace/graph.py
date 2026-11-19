@@ -218,9 +218,13 @@ async def _fetch_tax_claim_detail(state: TraceState, client: httpx.AsyncClient) 
     return {"tax_claim_detail": detail}
 
 
-def build_graph(client: httpx.AsyncClient) -> StateGraph:
+def build_graph(client: httpx.AsyncClient, synthesize=synthesize_report) -> StateGraph:
     """Compile and return the TitleTrace LangGraph. Pass a shared httpx client
-    so all node coroutines share a single connection pool."""
+    so all node coroutines share a single connection pool.
+
+    `synthesize` is injected the same way `client` is, so the recorded-trace
+    demo can run the graph without an ANTHROPIC_API_KEY. Everything before this
+    node is unaffected by the substitution."""
     g = StateGraph(TraceState)
 
     g.add_node("parse_address", parse_address)
@@ -233,7 +237,7 @@ def build_graph(client: httpx.AsyncClient) -> StateGraph:
     g.add_node("determine_tax_status", partial(_determine_tax_status, client=client))
     g.add_node("fetch_lienholder_detail", partial(_fetch_lienholder_detail, client=client))
     g.add_node("fetch_tax_claim_detail", partial(_fetch_tax_claim_detail, client=client))
-    g.add_node("synthesize_report", synthesize_report)
+    g.add_node("synthesize_report", synthesize)
 
     g.set_entry_point("parse_address")
     g.add_edge("parse_address", "fetch_parcel")

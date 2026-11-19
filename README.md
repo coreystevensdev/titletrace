@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![68 tests](https://img.shields.io/badge/tests-68-brightgreen)
+![82 tests](https://img.shields.io/badge/tests-82-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 68 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 82 tests (pytest + respx).
 
 ```bash
 docker compose up --build
@@ -91,7 +91,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-All 68 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
+All 82 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
@@ -113,8 +113,9 @@ Requires both API keys for non-error cases to score parcel_found_rate above 0%.
 
 - Philadelphia's flood-zone coordinates come from OPA's `lat`/`lng` fields, and that field-name assumption has never been confirmed against a live response: `data.phila.gov` returned HTTP 403 to the development sandbox's IP while this was being built. Non-Philadelphia coordinates come from ATTOM's `location.latitude`/`longitude` fields, which are documented and confirmed working.
 - Non-Philadelphia tax delinquency is inferred from a recorded ATTOM tax lien rather than a dedicated tax-status field, since ATTOM's free tier doesn't expose one. A lien can take time to reach ATTOM's `/alllien/detail` index after a county records it, so a property can be delinquent at the tax office before this lookup reflects it -- the same recording-lag gap `fetch_tax_claim_detail_attom` already documents for its own lien-detail lookup.
-- Only `fetch_parcel` catches vendor API errors. The other 8 graph nodes have no error handling: a timeout or non-2xx response from ATTOM, OPA, or FEMA during any of them crashes the whole trace instead of degrading to a partial report.
+- A vendor failure degrades the report rather than ending the trace: each node catches, logs, and leaves its slice of the state empty, which then shows up in the report's `data_gaps`. The cost is that a partial report and a complete one look alike until you read that list, so `confidence` is the field worth checking first.
 - Four separate node functions (`search_liens_attom`, `search_encumbrances_attom`, `fetch_lienholder_details_attom`, `fetch_tax_claim_detail_attom`) each call ATTOM's `/alllien/detail` endpoint independently per trace, which burns through the 200-calls/month free tier faster than a single shared fetch would.
+- The flood lookup is two FEMA calls, not one: the zone is on NFHL layer 28 and the FIRM panel and its effective date are on layer 3. FEMA needs no key and sets no quota, but a panel-layer failure drops the provenance while keeping the zone.
 - ATTOM free tier allows 200 calls/month. A single trace makes up to 5 ATTOM calls; the free tier supports ~40 traces/month before billing begins.
 - LangGraph state merging in the parallel fan-out uses last-write-wins for scalar fields. If two nodes set the same key, the later-resolving node wins. List fields (liens, encumbrances, ownership_history) are each owned by exactly one node, so no collision occurs in practice.
 - LangSmith tracing requires `LANGSMITH_API_KEY` and `LANGCHAIN_TRACING_V2=true`. Without it, traces are not persisted.
