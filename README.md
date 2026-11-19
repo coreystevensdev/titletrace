@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![82 tests](https://img.shields.io/badge/tests-82-brightgreen)
+![91 tests](https://img.shields.io/badge/tests-91-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 82 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 91 tests (pytest + respx).
 
 ```bash
 docker compose up --build
@@ -91,7 +91,7 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-All 82 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
+All 91 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
@@ -108,6 +108,35 @@ python eval/eval.py
 ```
 
 Requires both API keys for non-error cases to score parcel_found_rate above 0%.
+
+## Public demo
+
+The live trace cannot sit on an open URL. ATTOM's free tier is 200 calls a month and the synthesis step spends money per request, so anyone holding the button down would exhaust both.
+
+`POST /api/demo/trace` runs live when both keys are configured and the model budget holds, and falls back to recorded vendor responses otherwise. The response names which mode produced it and why, because a recorded trace presented as a live one is a claim the deployment has not earned.
+
+The recordings are injected at the transport layer with `httpx.MockTransport`, not by stubbing the clients. Retry and status classification, each client's parsing, the five-way fan-out, the fan-in and the conditional drill-down all run exactly as they would against the real vendors. What the recordings assert is only what a vendor said; every derived figure on the page is derived by the code that would derive it in production.
+
+Three addresses are recorded, chosen to take different paths rather than to look impressive:
+
+| Address | Route | What it exercises |
+| --- | --- | --- |
+| 1201 Chestnut St, Philadelphia PA | OPA | The Philadelphia branch, tax delinquency from OPA, drill-down on two liens |
+| 45 Lafayette Ave, Haddonfield NJ | ATTOM | Clean title, so the drill-down branch is skipped |
+| 812 Morris Rd, Wayne PA | ATTOM | Two liens and an easement, delinquency derived from the lien list |
+
+Synthesis is the one step not recorded. It calls Claude, and a response written by hand here would read as model output. In recorded mode the demo returns the real assembled prompt instead, which is `_build_prompt` running on the real traced state.
+
+### Budget
+
+Spend is guarded by [rolling-cost-cap](https://pypi.org/project/rolling-cost-cap/), checked before the call rather than after. `evaluate()` records a cost that has already left your account, which is the right shape for metering and the wrong one for a public URL. The node asks `check()` with a conservative estimate first, refuses if the budget is gone, and records the real token cost afterwards.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `TITLETRACE_MONTHLY_BUDGET_USD` | `5.00` | Hard stop for the month. Past it the demo serves recordings. |
+| `TITLETRACE_CALL_CEILING_USD` | `0.25` | Refuses any single call estimated above this. |
+
+One cap per process, not per request: a per-request cap caps nothing, since every visitor would arrive with a fresh budget. State is in-process, so N workers can collectively spend N times the budget, which is the trade-off the library's own README names.
 
 ## Known Limitations
 

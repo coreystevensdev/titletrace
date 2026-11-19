@@ -8,9 +8,13 @@ forces a JSON tool call so the output is always machine-readable.
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 import anthropic
+from rolling_cost_cap import CostCap
+
+logger = logging.getLogger(__name__)
 
 from titletrace.state import TraceReport, TraceState
 
@@ -110,20 +114,80 @@ def _build_prompt(state: TraceState) -> str:
     )
 
 
+# Sonnet 4.6 list price. Wrong rates would make the budget a number that means
+# nothing, so they are named here rather than buried in an expression.
+_INPUT_PER_MTOK = 3.00
+_OUTPUT_PER_MTOK = 15.00
+_MAX_OUTPUT_TOKENS = 1024
+
+
+def _build_cap(monthly_budget: float | None = None) -> CostCap:
+    return CostCap(
+        multiplier=3.0,
+        window=50,
+        min_samples=5,
+        absolute_ceiling=float(os.environ.get("TITLETRACE_CALL_CEILING_USD", "0.25")),
+        monthly_budget=monthly_budget
+        if monthly_budget is not None
+        else float(os.environ.get("TITLETRACE_MONTHLY_BUDGET_USD", "5.00")),
+    )
+
+
+# One cap for the process, not one per request. A per-request cap caps nothing:
+# every visitor would arrive with a fresh budget.
+_CAP = _build_cap()
+
+
+def _cost(input_tokens: int, output_tokens: int) -> float:
+    return (input_tokens / 1e6) * _INPUT_PER_MTOK + (output_tokens / 1e6) * _OUTPUT_PER_MTOK
+
+
+def _estimate(prompt: str) -> float:
+    """Pre-flight figure. Roughly four characters per token on the way in, and
+    the full max_tokens on the way out, because the only safe estimate for a
+    call that has not happened is the most expensive one it could be."""
+    return _cost(len(prompt) // 4, _MAX_OUTPUT_TOKENS)
+
+
+async def _call_model(prompt: str):
+    client = _get_client()
+    return await client.messages.create(
+        model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        max_tokens=_MAX_OUTPUT_TOKENS,
+        tools=[_REPORT_TOOL],
+        tool_choice={"type": "tool", "name": "submit_report"},
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+
 async def synthesize_report(state: TraceState) -> dict:
     if state.get("error"):
         return {}
 
-    client = _get_client()
     parcel = state.get("parcel")
+    prompt = _build_prompt(state)
 
-    response = await client.messages.create(
-        model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-        max_tokens=1024,
-        tools=[_REPORT_TOOL],
-        tool_choice={"type": "tool", "name": "submit_report"},
-        messages=[{"role": "user", "content": _build_prompt(state)}],
-    )
+    # Asked before the call, not after. evaluate() records a cost that has
+    # already been spent, which is the right shape for metering and the wrong
+    # one for a public URL where anyone can hold the button down.
+    verdict = _CAP.check(_estimate(prompt))
+    if not verdict.allowed:
+        logger.warning(
+            "synthesis_refused trip=%s observed=%.4f monthly_spend=%.4f",
+            verdict.trip, verdict.observed, verdict.monthly_spend,
+        )
+        return {"error": (
+            "Report generation is paused: this deployment's monthly model budget is spent. "
+            "The property data above was still gathered in full."
+        )}
+
+    response = await _call_model(prompt)
+
+    # The truth, not the estimate. An estimate recorded as spend would throttle
+    # the demo early; never recording would let real spend run past the budget.
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        _CAP.record(_cost(usage.input_tokens, usage.output_tokens))
 
     tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
     if not tool_use_blocks:
