@@ -24,6 +24,14 @@ dev = ["pytest>=8", "responses>=0.25", "pytest-asyncio>=0.24", "httpx", "respx"]
 packages = ["src/titletrace"]
 
 [tool.pytest.ini_options]
+# eval/ is tooling, not library code, so it is deliberately outside the wheel
+# that [tool.hatch.build.targets.wheel] builds. tests/test_trajectory_eval.py
+# still imports eval.trajectory, which worked only because `pip install -e .`
+# leaves the repo root on sys.path. Under an isolated venv it does not, so
+# `uv run pytest` failed collection with ModuleNotFoundError: No module named
+# 'eval'. Stating the path here makes the import work under either installer
+# without shipping eval/ to anyone.
+pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = ["integration: requires live API keys (skipped in CI unless INTEGRATION=true)"]
