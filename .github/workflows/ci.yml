@@ -16,6 +16,18 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: python -m pytest -v --tb=short -m "not integration"
 
+      - name: uv.lock still matches pyproject.toml
+        # The lock is not what installs anything here; pip does, from
+        # pyproject.toml. It exists so GitHub's dependency graph sees the whole
+        # transitive tree instead of only the declared deps, which is the
+        # difference between 62 packages scanned and 17. A lock nothing enforces
+        # drifts, and a drifted lock makes the scan precise and wrong, so this
+        # step fails if the two disagree. Exits 1 on drift, verified by adding a
+        # dependency to pyproject and watching it fail.
+        run: |
+          pip install --quiet uv
+          uv lock --check
+
       - name: Trajectory eval
         # Needs no API keys and costs nothing, because it replays the recorded
         # transport, so unlike eval/eval.py it can gate every commit. Exits 1
