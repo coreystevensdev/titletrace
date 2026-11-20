@@ -100,8 +100,9 @@ def _blank_state(address: str) -> TraceState:
 
 
 # ATTOM allows 200 calls a month on the free tier and charges nothing per call,
-# so the dollar cap cannot see it. A trace makes up to 5 ATTOM calls, so 30
-# live traces is about 150 calls, leaving headroom for development.
+# so the dollar cap cannot see it. A worst-case trace makes 6 ATTOM calls,
+# both drill-downs included, so 30 live traces is up to 180, leaving little
+# headroom for development against the 200 ceiling.
 _LIVE_TRACES_PER_MONTH = int(os.environ.get("TITLETRACE_LIVE_TRACES_PER_MONTH", "30"))
 _QUOTA_PATH = Path(os.environ.get("TITLETRACE_QUOTA_LEDGER", "/tmp/titletrace-quota.json"))
 
