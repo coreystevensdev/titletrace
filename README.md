@@ -1,9 +1,9 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![106 tests](https://img.shields.io/badge/tests-106-brightgreen)
+![121 tests](https://img.shields.io/badge/tests-121-brightgreen)
 
-Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 106 tests (pytest + respx).
+Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 121 tests (pytest + respx).
 
 A title search is what you run before buying property, and the reason it matters is that an unpaid lien the search misses becomes the new owner's debt.
 
@@ -95,13 +95,17 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
-All 106 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
+All 121 tests run without any API keys; CI runs with `-m "not integration"`. The `integration` marker is registered in `pyproject.toml` for future tests against live ATTOM data -- none are written yet:
 
 ```bash
 INTEGRATION=true pytest -v -m integration
 ```
 
 ## Eval
+
+Two harnesses, and they measure different things. One grades the report that comes out. The other grades the route the graph took to produce it, which is where the failures specific to an agent live.
+
+### Output eval
 
 Runs the full pipeline against 5 golden-dataset addresses and scores parse accuracy, parcel found rate, and error detection:
 
@@ -112,6 +116,30 @@ python eval/eval.py
 ```
 
 Requires both API keys for non-error cases to score parcel_found_rate above 0%.
+
+### Trajectory eval
+
+```bash
+PYTHONPATH=src python -m eval.trajectory
+```
+
+No API keys, no cost, so it runs in CI on every commit and fails the build. It replays the three recorded addresses and scores seven properties of the path rather than of the answer:
+
+| Check | What a failure means |
+|---|---|
+| `fanout_complete` | A parallel lookup stopped running and the report is quietly thinner |
+| `fanout_once_each` | A node ran twice, which is a duplicate vendor call |
+| `fanin_once` | `determine_tax_status` fired before all five returned |
+| `drilldown_matches_data` | The conditional branch disagrees with the data it was branching on |
+| `terminates_in_synthesis` | The graph ended somewhere other than the report |
+| `no_undeclared_nodes` | A node ran that this eval does not know about |
+| `vendor_routing` | Philadelphia left the OPA path, or a non-Philadelphia parcel left ATTOM |
+
+The one that justifies the harness is `drilldown_matches_data`. The expectation is derived from the state the trace collected, not written down per address: `fetch_lienholder_detail` should run exactly when liens were found and `fetch_tax_claim_detail` exactly when the parcel came back delinquent. So the expectation comes from the data and the observation comes from the node trace, and `_route_after_fanin` is what has to agree with both. Hardcoding "Philadelphia runs both drill-downs" would keep passing with the routing predicate inverted.
+
+Confirmed by breaking it. Inverting the liens condition takes it to 0 of 3 on `drilldown_matches_data`, because the clean parcel then queries a vendor for detail on liens that do not exist. Removing `fetch_zoning` from the `Send` fan-out takes it to 0 of 3 on `fanout_complete`. `tests/test_trajectory_eval.py` holds those cases as unit tests against the scorer, so a vacuous rewrite of the scoring fails the suite instead of reporting a clean sweep.
+
+What it does not measure is wall-clock parallelism. It asserts that the five fan-out nodes run between the parcel fetch and the fan-in and that the fan-in runs once after all five, which is the graph contract. Whether they overlapped in time is not observable against a transport that answers in microseconds.
 
 ## Public demo
 
