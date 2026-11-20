@@ -16,6 +16,12 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: python -m pytest -v --tb=short -m "not integration"
 
+      - name: Trajectory eval
+        # Needs no API keys and costs nothing, because it replays the recorded
+        # transport, so unlike eval/eval.py it can gate every commit. Exits 1
+        # if any of the three addresses takes a path the data does not justify.
+        run: python -m eval.trajectory
+
       - name: README test count matches what pytest collects
         run: |
           n=$(python -m pytest --collect-only -q -m "not integration" | grep -oE '^[0-9]+ tests? collected' | grep -oE '^[0-9]+')
