@@ -5,6 +5,10 @@
 
 Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 106 tests (pytest + respx).
 
+A title search is what you run before buying property, and the reason it matters is that an unpaid lien the search misses becomes the new owner's debt.
+
+**[Try it: titletrace.coreystevens.dev](https://titletrace.coreystevens.dev/)**, no signup: the page shows the five lookups running in parallel and the drill-down branch skipping itself when nothing is encumbered.
+
 ```bash
 docker compose up --build
 curl -X POST localhost:8000/api/trace \
@@ -14,7 +18,7 @@ curl -X POST localhost:8000/api/trace \
 
 ## Problem
 
-Title searches in PA and NJ require pulling data from four to six separate sources: parcel registries, lien databases, tax records, zoning classifications, and FEMA flood zone maps. A human title examiner checks each source manually and writes a narrative summary. The process takes hours and is error-prone when any single source returns stale data.
+Title searches in PA and NJ require pulling data from five separate sources: parcel registries, lien databases, tax records, zoning classifications, and FEMA flood zone maps. A human title examiner checks each source manually and writes a narrative summary. The process takes hours and is error-prone when any single source returns stale data.
 
 ## Solution
 
@@ -53,10 +57,10 @@ Claude is called only once, in `synthesize_report`, with a forced `submit_report
 
 | Layer | Technology | Why |
 |---|---|---|
-| Agent framework | LangGraph 0.4 | Parallel Send API enables true concurrent fan-out across 6 data nodes; LangSmith traces every run |
+| Agent framework | LangGraph, pinned `>=0.4,<0.6` | Parallel Send API fans out across 5 data nodes concurrently; LangSmith traces every run |
 | LLM | Claude via Anthropic SDK | Forced tool call (submit_report) guarantees structured output; model never sees raw PII |
 | API | FastAPI + uvicorn | Async-native, Pydantic schema validation, auto-generated OpenAPI docs |
-| HTTP | httpx.AsyncClient | Single shared connection pool across all 6 concurrent API calls; 30s timeout + exponential backoff on 429/503 |
+| HTTP | httpx.AsyncClient | Single shared connection pool across all 5 concurrent lookups; 30s timeout + exponential backoff on 429/503 |
 | Data (Philadelphia) | OPA + OpenDataPhilly | Free Socrata endpoints, no key required; best parcel coverage for Philadelphia |
 | Data (PA/NJ) | ATTOM Data API | Single vendor covering parcel, ownership, liens, encumbrances, and zoning across PA and NJ |
 | Flood zone | FEMA NFHL ArcGIS REST | Public endpoint, no key, authoritative FIRM panel designation. Queried with the coordinates returned by whichever parcel lookup ran (ATTOM or OPA) |
@@ -158,8 +162,8 @@ One cap per process, not per request: a per-request cap caps nothing, since ever
 - Philadelphia's flood-zone coordinates come from OPA's `lat`/`lng` fields, and that field-name assumption has never been confirmed against a live response: `data.phila.gov` returned HTTP 403 to the development sandbox's IP while this was being built. Non-Philadelphia coordinates come from ATTOM's `location.latitude`/`longitude` fields, which are documented and confirmed working.
 - Non-Philadelphia tax delinquency is inferred from a recorded ATTOM tax lien rather than a dedicated tax-status field, since ATTOM's free tier doesn't expose one. A lien can take time to reach ATTOM's `/alllien/detail` index after a county records it, so a property can be delinquent at the tax office before this lookup reflects it -- the same recording-lag gap `fetch_tax_claim_detail_attom` already documents for its own lien-detail lookup.
 - A vendor failure degrades the report rather than ending the trace: each node catches, logs, and leaves its slice of the state empty, which then shows up in the report's `data_gaps`. The cost is that a partial report and a complete one look alike until you read that list, so `confidence` is the field worth checking first.
-- Four separate node functions (`search_liens_attom`, `search_encumbrances_attom`, `fetch_lienholder_details_attom`, `fetch_tax_claim_detail_attom`) each call ATTOM's `/alllien/detail` endpoint independently per trace, which burns through the 200-calls/month free tier faster than a single shared fetch would.
+- Three call sites hit ATTOM's `/alllien/detail` per trace: the shared lien fetch, `fetch_lienholder_details_attom`, and `fetch_tax_claim_detail_attom`. It was four until `_inflight_lien_fetches` keyed an `asyncio.Task` by `(apn, state)`, so `search_liens_attom` and `search_encumbrances_attom` now await one in-flight request instead of two. Collapsing the remaining three would need the drill-downs to read from the first fetch's result rather than re-querying for richer fields.
 - The flood lookup is two FEMA calls, not one: the zone is on NFHL layer 28 and the FIRM panel and its effective date are on layer 3. FEMA needs no key and sets no quota, but a panel-layer failure drops the provenance while keeping the zone.
-- ATTOM free tier allows 200 calls/month. A single trace makes up to 5 ATTOM calls; the free tier supports ~40 traces/month before billing begins.
+- ATTOM free tier allows 200 calls/month. A worst-case non-Philadelphia trace makes 6 ATTOM calls (parcel, ownership, one coalesced lien fetch, zoning, lienholder detail, tax-claim detail), because `_route_after_fanin` queues both drill-downs when liens exist and the parcel is delinquent. That is about 33 traces/month before billing, not the ~40 this line claimed off a count of 5.
 - LangGraph state merging in the parallel fan-out uses last-write-wins for scalar fields. If two nodes set the same key, the later-resolving node wins. List fields (liens, encumbrances, ownership_history) are each owned by exactly one node, so no collision occurs in practice.
 - LangSmith tracing requires `LANGSMITH_API_KEY` and `LANGCHAIN_TRACING_V2=true`. Without it, traces are not persisted.

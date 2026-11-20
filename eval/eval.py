@@ -7,8 +7,9 @@ and scores each result on:
   - error_correctness: did bad addresses produce the expected error?
   - report_confidence: what confidence did synthesize_report assign?
 
-Uses openai (optional dep) for LLM-based faithfulness scoring if OPENAI_API_KEY
-is set. Without it, only deterministic metrics are computed.
+Every metric here is deterministic: no LLM judges the output. An earlier
+version of this docstring promised optional openai-based faithfulness
+scoring, which was never written.
 
 Usage:
     python -m eval.eval [--dataset eval/golden_dataset.json] [--output eval/results.json]
