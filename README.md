@@ -5,6 +5,10 @@
 
 Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 106 tests (pytest + respx).
 
+A title search is what you run before buying property, and the reason it matters is that an unpaid lien the search misses becomes the new owner's debt.
+
+**[Try it: titletrace.coreystevens.dev](https://titletrace.coreystevens.dev/)**, no signup: the page shows the five lookups running in parallel and the drill-down branch skipping itself when nothing is encumbered.
+
 ```bash
 docker compose up --build
 curl -X POST localhost:8000/api/trace \
