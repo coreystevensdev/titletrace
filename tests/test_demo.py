@@ -107,3 +107,39 @@ async def test_the_prompt_is_built_from_the_traced_state():
     prompt = _build_prompt(result)
     assert "submit_report" in prompt
     assert RECORDED_ADDRESSES[0].split()[0] in prompt
+
+
+@pytest.mark.asyncio
+async def test_an_unrecorded_philadelphia_address_returns_no_parcel():
+    """The demo must not answer with a parcel nobody asked about.
+
+    The OPA recordings carried predicate=None, so they matched every request to
+    their path regardless of the address queried. Asking the live demo for
+    "1600 Market St" answered "1201 CHESTNUT ST" owned by CHESTNUT PARTNERS LP,
+    with the tax and ownership recordings agreeing, so a visitor typing their own
+    address got a complete and confident trace of a different property.
+
+    routes.demo_trace already replaces the error with "no recorded trace for X,
+    this demo only covers ..." whenever the parcel comes back None. It simply
+    never got the chance.
+    """
+    async def no_synthesis(state):
+        return {}
+
+    async with demo_client() as client:
+        graph = build_graph(client, synthesize=no_synthesis)
+        result = await graph.ainvoke({
+            "raw_address": "1600 Market St, Philadelphia, PA 19103",
+            "parcel_id": None, "state": None, "city": None, "parcel": None,
+            "ownership_history": [], "liens": [], "encumbrances": [], "zoning": None,
+            "tax_status": None, "flood_zone": None, "lienholder_details": [],
+            "tax_claim_detail": None, "report": None, "error": None,
+        })
+
+    assert result.get("parcel") is None, (
+        f"an unrecorded address resolved to {result.get('parcel')!r}, which is "
+        "some other property's record"
+    )
+    # Nothing downstream should have invented content for it either.
+    assert result.get("ownership_history") == []
+    assert result.get("liens") == []

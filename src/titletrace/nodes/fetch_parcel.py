@@ -41,7 +41,16 @@ async def fetch_parcel(state: TraceState, client: httpx.AsyncClient) -> dict:
     parcel = None
     if is_philly:
         street, _ = _street_and_citystate(raw)
-        parcel = await fetch_parcel_opa(client, street)
+        # Wrapped, where it was not. OPA raising here used to be impossible in
+        # recorded mode because the recording matched every address, so the demo
+        # answered a Philadelphia question with whichever parcel was recorded.
+        # In live mode the same gap meant an OPA outage crashed the trace instead
+        # of falling through to ATTOM. Either way the fallback below is what
+        # should decide, so a miss becomes None rather than an exception.
+        try:
+            parcel = await fetch_parcel_opa(client, street)
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            logger.warning("OPA parcel lookup failed for %r: %s", street, exc)
 
     if parcel is None:
         street, citystate = _street_and_citystate(raw)
