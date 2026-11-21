@@ -75,6 +75,19 @@ async def _run_trace(client: httpx.AsyncClient, address: str) -> dict[str, Any]:
     }
 
 
+# synthesize_report's tool schema pins the enum to these three, in this order.
+_CONFIDENCE_ORDER = ("minimal", "partial", "full")
+
+
+def _confidence_rank(value: str | None) -> int:
+    """Rank for comparison; an unknown or missing value ranks below minimal so
+    it cannot satisfy a floor by accident."""
+    try:
+        return _CONFIDENCE_ORDER.index(value)
+    except ValueError:
+        return -1
+
+
 def _score(case: dict, actual: dict) -> dict[str, Any]:
     scores: dict[str, Any] = {"id": case["id"]}
 
@@ -92,6 +105,15 @@ def _score(case: dict, actual: dict) -> dict[str, Any]:
         scores["parcel_found"] = actual.get("parcel_found", False)
         scores["error_correct"] = actual.get("error") is None
         scores["confidence"] = actual.get("report_confidence")
+
+        # expected_confidence_min sat in the dataset unread, so a report could
+        # come back minimal on a case written to require partial and the eval
+        # recorded the value without comparing it to anything.
+        floor = case.get("expected_confidence_min")
+        if floor:
+            scores["confidence_meets_floor"] = _confidence_rank(
+                actual.get("report_confidence")
+            ) >= _confidence_rank(floor)
 
     scores["duration_ms"] = actual.get("duration_ms")
     return scores

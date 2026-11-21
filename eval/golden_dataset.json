@@ -6,7 +6,6 @@
     "expected_state": "PA",
     "expected_city": "Philadelphia",
     "data_source": "Philadelphia OPA",
-    "expected_findings_contain": [],
     "expected_confidence_min": "partial"
   },
   {
@@ -16,7 +15,6 @@
     "expected_state": "PA",
     "expected_city": "Philadelphia",
     "data_source": "Philadelphia OPA",
-    "expected_findings_contain": [],
     "expected_confidence_min": "partial"
   },
   {
@@ -26,7 +24,6 @@
     "expected_state": "NJ",
     "expected_city": "Trenton",
     "data_source": "ATTOM",
-    "expected_findings_contain": [],
     "expected_confidence_min": "partial"
   },
   {
