@@ -43,7 +43,7 @@ flowchart TD
     E --> Z
 ```
 
-Claude is called only once, in `synthesize_report`, with a forced `submit_report` tool call. The model never sees raw address input or API credentials.
+Claude is called only once, in `synthesize_report`, with a forced `submit_report` tool call. The prompt carries named fields pulled out of each vendor response, never the raw payloads and never API credentials. It does carry the address, the owner name and any lienholder names, so that is a narrowing of what reaches the model rather than a guarantee that nothing identifying does.
 
 ### Data source routing
 
@@ -58,7 +58,7 @@ Claude is called only once, in `synthesize_report`, with a forced `submit_report
 | Layer | Technology | Why |
 |---|---|---|
 | Agent framework | LangGraph, pinned `>=0.4,<0.6` | Parallel Send API fans out across 5 data nodes concurrently; LangSmith traces every run |
-| LLM | Claude via Anthropic SDK | Forced tool call (submit_report) guarantees structured output; model never sees raw PII |
+| LLM | Claude via Anthropic SDK | Forced tool call (submit_report) guarantees structured output; prompt carries extracted fields, not raw vendor payloads or credentials |
 | API | FastAPI + uvicorn | Async-native, Pydantic schema validation, auto-generated OpenAPI docs |
 | HTTP | httpx.AsyncClient | Single shared connection pool across all 5 concurrent lookups; 30s timeout + exponential backoff on 429/503 |
 | Data (Philadelphia) | OPA + OpenDataPhilly | Free Socrata endpoints, no key required; best parcel coverage for Philadelphia |
