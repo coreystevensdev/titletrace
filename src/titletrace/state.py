@@ -97,14 +97,10 @@ class LienholderDetail(BaseModel):
     source: str
 
 
-class DataUnavailable(BaseModel):
-    reason: str
-    recommended_action: str | None = None
-
-
 class TraceReport(BaseModel):
-    """Synthesized output from the generate node. Always produced even when
-    some data sources are unavailable; missing fields surface as DataUnavailable."""
+    """Synthesized output from the generate node. Always produced even when some
+    data sources are unavailable: a missing field stays None and the reason goes
+    in data_gaps, so an absent value is never confused with a known-zero one."""
 
     parcel_id: str | None = None
     address: str
