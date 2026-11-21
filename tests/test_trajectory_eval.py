@@ -112,14 +112,28 @@ def test_lien_endpoint_is_shared_by_the_two_search_nodes():
 
 
 def test_fanout_set_is_the_graph_contract():
-    """Guards against the eval drifting from the graph: if a node is added to
-    the fan-out, FAN_OUT has to learn about it or fanout_complete goes stale."""
+    """Guards against the eval drifting from the graph in either direction: a
+    node dropped from the fan-out, or one added to it that FAN_OUT never learns
+    about, both make fanout_complete stale.
+
+    This read build_graph's source, where no Send() call appears: they live in
+    _route_after_parcel. So the `Send("x") in source` half was never true and
+    the fallback `"x" in source` was guaranteed by add_node. Deleting a Send
+    from the fan-out passed. Compare the sets instead.
+    """
     import inspect
+    import re
 
     from titletrace import graph
 
-    source = inspect.getsource(graph.build_graph)
-    for node in FAN_OUT:
-        assert f'Send("{node}"' in source or f'"{node}"' in source, (
-            f"{node} is in the eval's FAN_OUT but not in build_graph"
-        )
+    source = inspect.getsource(graph._route_after_parcel)
+    dispatched = set(re.findall(r'Send\(\s*"([^"]+)"', source))
+    assert dispatched, (
+        "no Send() calls found in _route_after_parcel; the fan-out moved and "
+        "this guard has to move with it"
+    )
+    assert dispatched == set(FAN_OUT), (
+        f"the router dispatches {sorted(dispatched)} but the eval's FAN_OUT is "
+        f"{sorted(FAN_OUT)}; missing from FAN_OUT: {sorted(dispatched - set(FAN_OUT))}, "
+        f"missing from the router: {sorted(set(FAN_OUT) - dispatched)}"
+    )
