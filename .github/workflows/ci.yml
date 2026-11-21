@@ -13,30 +13,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e '.[dev]'
-      - run: python -m pytest -v --tb=short -m "not integration"
-
-      - name: uv.lock still matches pyproject.toml
-        # The lock is not what installs anything here; pip does, from
-        # pyproject.toml. It exists so GitHub's dependency graph sees the whole
-        # transitive tree instead of only the declared deps, which is the
-        # difference between 62 packages scanned and 17. A lock nothing enforces
-        # drifts, and a drifted lock makes the scan precise and wrong, so this
-        # step fails if the two disagree. Exits 1 on drift, verified by adding a
-        # dependency to pyproject and watching it fail.
-        run: |
+      # From the lock, not from pyproject, so the tree CI tests is the tree the
+      # dependency graph scans. --locked rather than --frozen: both install from
+      # the lock but only --locked fails when it no longer matches pyproject,
+      # which replaces the separate `uv lock --check` step this had.
+      - run: |
           pip install --quiet uv
-          uv lock --check
+          uv sync --locked --extra dev
+      - run: uv run --frozen python -m pytest -v --tb=short -m "not integration"
+
 
       - name: Trajectory eval
         # Needs no API keys and costs nothing, because it replays the recorded
         # transport, so unlike eval/eval.py it can gate every commit. Exits 1
         # if any of the three addresses takes a path the data does not justify.
-        run: python -m eval.trajectory
+        run: uv run --frozen python -m eval.trajectory
 
       - name: README test count matches what pytest collects
         run: |
-          n=$(python -m pytest --collect-only -q -m "not integration" | grep -oE '^[0-9]+ tests? collected' | grep -oE '^[0-9]+')
+          n=$(uv run --frozen python -m pytest --collect-only -q -m "not integration" | grep -oE '^[0-9]+ tests? collected' | grep -oE '^[0-9]+')
           [ -n "$n" ] || { echo "could not parse a count out of pytest"; exit 1; }
           fail=0
           grep -q "tests-$n-brightgreen" README.md || { echo "badge does not say $n"; fail=1; }
