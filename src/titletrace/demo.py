@@ -58,7 +58,15 @@ _WAYNE_APN = "23-05501-0000-00003"
 # several parcels. A miss is a 404 on purpose: see test_demo.py.
 _RECORDINGS: list[tuple[str, str, object, dict]] = [
     # Philadelphia goes through OPA, not ATTOM.
-    (_OPA, "/resource/w7rb-qrpr.json", None, [{
+    # Matched on the queried address, not unconditionally. With predicate=None
+    # here, every Philadelphia address returned this parcel: asking for
+    # "1600 Market St" answered "1201 CHESTNUT ST" owned by CHESTNUT PARTNERS LP,
+    # with the tax and ownership recordings below agreeing, so the whole trace
+    # looked like a real answer to a question nobody asked. routes.demo_trace
+    # already says "no recorded trace for X, this demo only covers ..." when the
+    # parcel comes back None; it never got the chance.
+    (_OPA, "/resource/w7rb-qrpr.json",
+     lambda p: "chestnut" in (p.get("location") or "").lower(), [{
         "parcel_number": "882026000",
         "location": "1201 CHESTNUT ST",
         "owner_1": "CHESTNUT PARTNERS LP",
@@ -70,12 +78,16 @@ _RECORDINGS: list[tuple[str, str, object, dict]] = [
         "lng": "-75.161270",
         "zoning": "CMX-5",
     }]),
-    (_OPA, "/resource/3qem-6v3v.json", None, [{
+    # Keyed on the parcel, like the real endpoint. Only reachable once the lookup
+    # above succeeds, but leaving it open made the recording look addressless.
+    (_OPA, "/resource/3qem-6v3v.json",
+     lambda p: p.get("parcel_number") == "882026000", [{
         "parcel_number": "882026000",
         "total_due": "18422.61",
         "oldest_year_owed": "2021",
     }]),
-    (_OPA, "/resource/2upd-bkgb.json", None, [
+    (_OPA, "/resource/2upd-bkgb.json",
+     lambda p: p.get("opa_account_num") == "882026000", [
         {"opa_account_num": "882026000", "grantees": "CHESTNUT PARTNERS LP",
          "display_date": "2019-06-14T00:00:00.000", "total_consideration": "4150000",
          "document_type": "DEED"},
