@@ -1,7 +1,7 @@
 # TitleTrace
 
 [![CI](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml/badge.svg)](https://github.com/coreystevensdev/titletrace/actions/workflows/ci.yml)
-![121 tests](https://img.shields.io/badge/tests-122-brightgreen)
+![122 tests](https://img.shields.io/badge/tests-122-brightgreen)
 
 Property title search as a LangGraph agent. Feed it a PA or NJ address; it fans out 5 parallel data lookups, determines tax status from the results, conditionally drills into lienholder detail and tax delinquency, then synthesizes a structured title report via Claude. 122 tests (pytest + respx).
 
@@ -57,7 +57,7 @@ Claude is called only once, in `synthesize_report`, with a forced `submit_report
 
 | Layer | Technology | Why |
 |---|---|---|
-| Agent framework | LangGraph, pinned `>=0.4,<0.6` | Parallel Send API fans out across 5 data nodes concurrently; LangSmith traces every run |
+| Agent framework | LangGraph, pinned `>=1.0.10,<2` | Parallel Send API fans out across 5 data nodes concurrently; LangSmith traces every run |
 | LLM | Claude via Anthropic SDK | Forced tool call (submit_report) guarantees structured output; prompt carries extracted fields, not raw vendor payloads or credentials |
 | API | FastAPI + uvicorn | Async-native, Pydantic schema validation, auto-generated OpenAPI docs |
 | HTTP | httpx.AsyncClient | Single shared connection pool across all 5 concurrent lookups; 30s timeout + exponential backoff on 429/503 |

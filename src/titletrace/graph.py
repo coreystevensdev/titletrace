@@ -122,9 +122,10 @@ _TAX_LIEN_TYPE_MARKER = "tax"
 async def _determine_tax_status(state: TraceState, client: httpx.AsyncClient) -> dict:
     """Runs after the parallel fan-out (not inside it) so the non-Philadelphia
     branch can reuse search_liens's already-fetched lien list instead of
-    issuing a fifth call against ATTOM's /alllien/detail endpoint -- the same
-    endpoint four other nodes already hit per trace, against a 200-calls/
-    month free tier.
+    issuing another call against ATTOM's /alllien/detail endpoint. search_liens
+    and search_encumbrances both hit that endpoint on every trace, and
+    fetch_lienholder_detail hits it again when it runs, against a
+    200-calls/month free tier.
 
     Philadelphia keeps its existing OPA-based lookup unchanged. Everywhere
     else, ATTOM has no dedicated delinquency endpoint: a tax lien recorded
