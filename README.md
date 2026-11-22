@@ -28,7 +28,7 @@ A LangGraph state machine runs the lookups concurrently. Philadelphia properties
 
 ![TitleTrace after tracing a Wayne, PA address: the parcel panel, the five parallel lookups, the FEMA FIRM panel, the claims table, the drill-down branch that fired, and the prompt assembled from all of it](docs/demo.png)
 
-The page renders the graph as it ran rather than a summary of it. The parcel lookup has to finish first, because everything after it needs the coordinates and the city that lookup returns. The five sources then go out together. The drill-down panel appears only when there is something to chase: the trace above found two liens so it ran, and the Haddonfield quick-pick is clear, so on that one it visibly does not.
+The page renders the graph as it ran rather than a summary of it. The parcel lookup has to finish first, because everything after it needs the coordinates and the city that lookup returns. The five sources then go out together. The drill-down panel then reports which way the conditional went, in both directions: the trace above found two liens, so it reads `Drill-down ran` with the three lienholders it chased, and the lien-clear Haddonfield quick-pick reads `Drill-down skipped`. A branch that says it did not run is more use than a panel that quietly is not there.
 
 The badge under the form reads `recorded`, which is the deployment saying no ATTOM key is configured and those vendor responses came from the recordings. It would read `live` with the keys set. That distinction is the point of the badge, so a screenshot of it is not evidence the deployment can reach ATTOM.
 
