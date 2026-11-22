@@ -38,28 +38,11 @@ def _load_dataset(path: Path) -> list[dict]:
 
 async def _run_trace(client: httpx.AsyncClient, address: str) -> dict[str, Any]:
     from titletrace.graph import build_graph
-    from titletrace.state import TraceState
+    from titletrace.state import TraceState, blank_state
 
     graph = build_graph(client)
-    initial: TraceState = {
-        "raw_address": address,
-        "parcel_id": None,
-        "state": None,
-        "city": None,
-        "parcel": None,
-        "ownership_history": [],
-        "liens": [],
-        "encumbrances": [],
-        "zoning": None,
-        "tax_status": None,
-        "flood_zone": None,
-        "lienholder_details": [],
-        "tax_claim_detail": None,
-        "report": None,
-        "error": None,
-    }
     t0 = time.monotonic()
-    result: TraceState = await graph.ainvoke(initial)
+    result: TraceState = await graph.ainvoke(blank_state(address))
     duration_ms = int((time.monotonic() - t0) * 1000)
     report = result.get("report")
     return {
