@@ -345,10 +345,11 @@ function step(title, note, body, skipped) {
 function render(d) {
   const out = [];
 
+  // Guaranteed non-null: the caller bails to a message on !d.parcel before here.
   const p = d.parcel;
   out.push(step(
     "Parcel",
-    p ? `Identified through ${p.source}.` : "Not identified.",
+    `Identified through ${p.source}.`,
     `<div class="panel">${facts([
       ["Parcel ID", p.parcel_id, true],
       ["Owner", p.owner_name],

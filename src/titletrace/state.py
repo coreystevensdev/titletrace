@@ -134,3 +134,29 @@ class TraceState(TypedDict):
     tax_claim_detail: TaxClaimDetail | None
     report: TraceReport | None
     error: str | None
+
+
+def blank_state(address: str) -> TraceState:
+    """A fresh state for one trace.
+
+    The list fields start as lists rather than None on purpose: graph nodes do
+    state.get("liens", []) and a key present with a None value defeats that
+    default, so the iteration raises instead of skipping.
+    """
+    return {
+        "raw_address": address,
+        "parcel_id": None,
+        "state": None,
+        "city": None,
+        "parcel": None,
+        "ownership_history": [],
+        "liens": [],
+        "encumbrances": [],
+        "zoning": None,
+        "tax_status": None,
+        "flood_zone": None,
+        "lienholder_details": [],
+        "tax_claim_detail": None,
+        "report": None,
+        "error": None,
+    }

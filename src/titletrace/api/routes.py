@@ -27,7 +27,7 @@ from titletrace.api.http_client import get_http_client
 from titletrace.demo import RECORDED_ADDRESSES, demo_client
 from titletrace.graph import build_graph
 from titletrace.nodes.synthesize_report import _CAP, _build_prompt, synthesize_report
-from titletrace.state import TraceState
+from titletrace.state import TraceState, blank_state
 
 logger = logging.getLogger(__name__)
 
@@ -58,26 +58,8 @@ async def trace(req: TraceRequest):
     client = get_http_client()
     graph = build_graph(client)
 
-    initial: TraceState = {
-        "raw_address": req.address.strip(),
-        "parcel_id": None,
-        "state": None,
-        "city": None,
-        "parcel": None,
-        "ownership_history": [],
-        "liens": [],
-        "encumbrances": [],
-        "zoning": None,
-        "tax_status": None,
-        "flood_zone": None,
-        "lienholder_details": [],
-        "tax_claim_detail": None,
-        "report": None,
-        "error": None,
-    }
-
     t0 = time.monotonic()
-    result: TraceState = await graph.ainvoke(initial)
+    result: TraceState = await graph.ainvoke(blank_state(req.address.strip()))
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     report = result.get("report")
@@ -87,16 +69,6 @@ async def trace(req: TraceRequest):
         error=result.get("error"),
         duration_ms=duration_ms,
     )
-
-
-def _blank_state(address: str) -> TraceState:
-    return {
-        "raw_address": address, "parcel_id": None, "state": None, "city": None,
-        "parcel": None, "ownership_history": [], "liens": [], "encumbrances": [],
-        "zoning": None, "tax_status": None, "flood_zone": None,
-        "lienholder_details": [], "tax_claim_detail": None, "report": None,
-        "error": None,
-    }
 
 
 # ATTOM allows 200 calls a month on the free tier and charges nothing per call,
@@ -214,14 +186,14 @@ async def demo_trace(req: TraceRequest):
         # has still spent the ATTOM calls it made.
         _record_live_trace()
         graph = build_graph(get_http_client(), synthesize=synthesize_report)
-        result = await graph.ainvoke(_blank_state(address))
+        result = await graph.ainvoke(blank_state(address))
     else:
         async def skip_synthesis(state):
             return {}
 
         async with demo_client() as client:
             graph = build_graph(client, synthesize=skip_synthesis)
-            result = await graph.ainvoke(_blank_state(address))
+            result = await graph.ainvoke(blank_state(address))
 
     duration_ms = int((time.monotonic() - t0) * 1000)
     parcel = result.get("parcel")
