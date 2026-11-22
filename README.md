@@ -24,6 +24,25 @@ Title searches in PA and NJ require pulling data from five separate sources: par
 
 A LangGraph state machine runs the lookups concurrently. Philadelphia properties route through the free OPA (Office of Property Assessment) and OpenDataPhilly APIs; all other PA and NJ properties use ATTOM Data. Flood zone comes from the FEMA NFHL client, called with the coordinates each parcel lookup now returns: ATTOM's `location.latitude`/`longitude` fields for non-Philadelphia PA and NJ parcels, and OPA's `lat`/`lng` fields for Philadelphia (see Known Limitations for the caveat on that second source). Tax delinquency outside Philadelphia is derived from ATTOM's lien records rather than left unimplemented, since ATTOM has no dedicated tax-status endpoint on its free tier. After the parallel fan-out completes, Claude synthesizes a structured `TraceReport` via forced tool call, surfacing data gaps explicitly rather than hallucinating over missing fields.
 
+## Features
+
+![TitleTrace after tracing a Wayne, PA address: the parcel panel, the five parallel lookups, the FEMA FIRM panel, the claims table, the drill-down branch that fired, and the prompt assembled from all of it](docs/demo.png)
+
+The page renders the graph as it ran rather than a summary of it. The parcel lookup has to finish first, because everything after it needs the coordinates and the city that lookup returns. The five sources then go out together. The drill-down panel then reports which way the conditional went, in both directions: the trace above found two liens, so it reads `Drill-down ran` with the three lienholders it chased, and the lien-clear Haddonfield quick-pick reads `Drill-down skipped`. A branch that says it did not run is more use than a panel that quietly is not there.
+
+The badge under the form reads `recorded`, which is the deployment saying no ATTOM key is configured and those vendor responses came from the recordings. It would read `live` with the keys set. That distinction is the point of the badge, so a screenshot of it is not evidence the deployment can reach ATTOM.
+
+The last panel is the prompt, assembled from the state above it by the same function the live path uses, so what the page shows is what the model gets.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `POST` | `/api/trace` | The real trace, against the live vendors. Needs the vendor and model keys configured. |
+| `POST` | `/api/demo/trace` | The same trace behind the public page. Live when the keys are set and the model budget holds, recorded otherwise, and the response names which mode produced it. |
+| `GET` | `/health` | Liveness only. Touches no vendor, no database and no model. |
+| `GET` | `/` | The page above, served by the app rather than a CDN so it cannot drift from the route it calls. Kept out of the OpenAPI schema, so `/docs` lists the three JSON routes and not the HTML one. |
+
+Why the public route cannot just be the live one is in [Public demo](#public-demo).
+
 ## Architecture
 
 ```mermaid
