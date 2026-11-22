@@ -26,8 +26,8 @@ class ParcelResult(BaseModel):
     # ATTOM's /property/detail response includes these under a `location`
     # block (confirmed against ATTOM's public API docs). Philadelphia's OPA
     # dataset is assumed to expose "lat"/"lng" top-level fields -- this could
-    # not be live-verified (data.phila.gov returned HTTP 403 to this
-    # session's sandbox IP), so treat it as an educated guess, not a
+    # not be live-verified (data.phila.gov returned HTTP 403 to the development
+    # sandbox's IP while this was being built), so treat it as an educated guess, not a
     # confirmed fact, until a real OPA response is captured.
     latitude: float | None = None
     longitude: float | None = None
