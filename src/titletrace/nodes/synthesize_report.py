@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import asyncio
-import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -18,9 +17,9 @@ from pathlib import Path
 import anthropic
 from rolling_cost_cap import CostCap
 
-logger = logging.getLogger(__name__)
-
 from titletrace.state import TraceReport, TraceState
+
+logger = logging.getLogger(__name__)
 
 _CLIENT = None
 

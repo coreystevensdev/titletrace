@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from titletrace.demo import RECORDED_ADDRESSES, demo_client, recorded_transport
-from titletrace.clients import attom, fema
+from titletrace.clients import attom
 from titletrace.graph import build_graph
 
 

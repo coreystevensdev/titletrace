@@ -20,6 +20,13 @@ jobs:
       - run: |
           pip install --quiet uv
           uv sync --locked --extra dev
+      # .ruff_cache was committed to the tree, so ruff was already part of the
+      # hand workflow and only CI did not run it. Fifteen errors had accumulated
+      # across six files, including a duplicate `import json` and a logger
+      # assignment sitting between the third-party and local import blocks.
+      - name: Lint
+        run: uv run --frozen ruff check --select F,E4,E7,E9 src/ tests/ eval/
+
       - run: uv run --frozen python -m pytest -v --tb=short -m "not integration"
 
 

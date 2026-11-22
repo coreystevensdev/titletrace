@@ -11,11 +11,11 @@ import logging
 
 import httpx
 
-logger = logging.getLogger(__name__)
-
 from titletrace.clients.attom import fetch_parcel_attom
 from titletrace.clients.opa import fetch_parcel_opa
 from titletrace.state import TraceState
+
+logger = logging.getLogger(__name__)
 
 
 def _is_philadelphia(state: TraceState) -> bool:

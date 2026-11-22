@@ -20,7 +20,6 @@ running on the real traced state.
 
 from __future__ import annotations
 
-import json
 
 import httpx
 
