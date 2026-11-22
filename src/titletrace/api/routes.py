@@ -243,7 +243,7 @@ async def demo_trace(req: TraceRequest):
         "duration_ms": duration_ms,
         "parcel": parcel.model_dump() if parcel else None,
         "ownership_history": [o.model_dump() for o in result.get("ownership_history") or []],
-        "liens": [l.model_dump() for l in result.get("liens") or []],
+        "liens": [lien.model_dump() for lien in result.get("liens") or []],
         "encumbrances": [e.model_dump() for e in result.get("encumbrances") or []],
         "zoning": result["zoning"].model_dump() if result.get("zoning") else None,
         "tax_status": result["tax_status"].model_dump() if result.get("tax_status") else None,

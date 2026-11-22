@@ -27,7 +27,7 @@ def test_the_zone_query_asks_only_for_fields_layer_28_has():
     from titletrace.clients import fema
 
     src = inspect.getsource(fema.fetch_flood_zone)
-    outfields = [l for l in src.splitlines() if "outFields" in l and "FLD_ZONE" in l]
+    outfields = [line for line in src.splitlines() if "outFields" in line and "FLD_ZONE" in line]
     assert outfields, "zone query no longer names its outFields"
     assert "FIRM_PANEL" not in outfields[0]
     assert "EFF_DATE" not in outfields[0]
